@@ -1,0 +1,47 @@
+/*
+ * Global styles for the desktop application.
+ * The Deskbound design system supplies all tokens and component chrome.
+ */
+@import "../../../packages/deskbound/styles/index.css";
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui, "Hanken Grotesk", sans-serif);
+  color: var(--ink-primary);
+}
+
+a {
+  color: var(--accent, #9c5310);
+}
+a:hover {
+  color: var(--ink-primary);
+}
+
+/* Zoom-tier sheets fade/scale in as detail levels switch. */
+@keyframes tierIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Two-beat pulse that flashes a day cell after a search or Today jump. */
+@keyframes flashPulse {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  50% {
+    box-shadow: 0 0 0 3px var(--selection, #3b62a8);
+  }
+}

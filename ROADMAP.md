@@ -42,6 +42,9 @@ spatial rendering to the canvas package per the architecture boundaries.
 - [ ] Schema v1: `desk`, `calendar`, `calendar_object`, `event`, `attachment`, `tag`, `setting` with versioned migrations
 - [ ] Reopen the last desk on launch; crash-safe write flushing
 - [ ] `SQLitePersistence` implementing the `@infinite-desk/persistence` contracts
+- [ ] Generate and vault the Tauri updater signing keypair before the first shipped build (losing it strands installed apps on old versions)
+- [ ] Set up Azure Trusted Signing for Windows builds and wire it into CI (decided; same route as pr-sweep)
+- [ ] GitHub Actions release pipeline — build, sign, and bundle per platform — modeled on pr-sweep's CI/CD
 
 ## Milestone 4 — Objects and input depth (delivery steps 6–7)
 
@@ -62,7 +65,7 @@ spatial rendering to the canvas package per the architecture boundaries.
 - [ ] Accessibility: keyboard access to every tool, accessible structured mirrors of canvas content, screen-reader passes
 - [ ] Playwright end-to-end suite covering the ADR's priority scenarios
 - [ ] Performance budgets measured on dense, lived-in desks (frame time, hit-test latency, open time, memory)
-- [ ] Cross-platform webview testing; packaging, signing, and updates
+- [ ] Cross-platform webview testing; packaging and updates through the signed release pipeline (Windows: Azure Trusted Signing; macOS: Developer ID + notarization)
 
 ## Beyond Version 1 (explicitly deferred)
 

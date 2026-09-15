@@ -1,0 +1,12 @@
+{
+  "name": "@infinite-desk/persistence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Persistence contracts for Infinite Desk Calendar, plus an in-memory adapter. The SQLite (Tauri) and IndexedDB (web) adapters implement these interfaces.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@infinite-desk/domain": "workspace:*"
+  }
+}

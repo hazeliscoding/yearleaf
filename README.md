@@ -8,16 +8,37 @@ No account. No cloud. Your desk lives on your machine.
 
 ## ✨ What works today
 
-The first milestone implements the [Deskbound-designed](docs/design/) application screen end to end:
+The workspace is **one continuous, GPU-rendered world** (PixiJS 8): every month of every
+year has a fixed place on the desk, zooming changes the level of detail, and navigating
+time is just panning. The [Deskbound design](docs/design/) supplies every color, type
+role, and control.
 
-- **Spatial workspace** — pan (space-drag, wheel, or the Pan tool) and zoom (Ctrl/⌘ + wheel around the cursor, or the zoom widget) across a paper desk.
-- **Four zoom tiers** — year planner, month sheet, week sheet, and day page, switchable from the toolbar.
-- **A lived-in month** — events (timed, all-day, tentative, recurring, completed), tasks, multi-day ranges, handwriting, and taped photos on a September 2026 sample desk.
-- **Desk objects** — draggable sticky notes (with checklists), images, file attachments, and freeform text; double-click empty paper to write.
-- **Universal undo/redo** — every mutation is a command; a drag commits exactly one history entry (⌘Z / ⇧⌘Z).
-- **Selection & inspector** — click an object for its contextual inspector (paper color, geometry, event schedule, image caption).
-- **Search & command palette** — search events, notes, handwriting, and files; ⌘K opens the palette; jumps flash the target day.
-- **Light & dark themes** — warm paper by day, charcoal drafting paper by night.
+- **Infinite spatial canvas** — pan (space-drag, wheel, or the Pan tool) and zoom
+  (Ctrl/⌘ + wheel around the cursor) from a whole year down to a single day; the
+  Day/Week/Month/Year control applies zoom presets onto the same world.
+- **Progressive detail** — year tier shows month structure and density dots; month tier
+  shows numerals, event chips, tasks, ranges, handwriting, and photos; week/day tiers
+  add metadata lines.
+- **Real month navigation** — any month of any year, with the date navigator following
+  the viewport focus; Today, search, and palette jumps center and flash the target day.
+- **A lived-in month** — events (timed, all-day, tentative, recurring, completed),
+  tasks, multi-day ranges, handwriting, and taped photos on a September 2026 sample desk.
+- **Desk objects** — sticky notes (with checklists), images, file attachments, and
+  freeform text: drag to move, southeast handle to resize, arrow keys to nudge,
+  Delete to remove, double-click to edit (DOM editor over the canvas), double-click
+  empty paper to write.
+- **Universal undo/redo** — every mutation is a command; a drag or resize commits
+  exactly one history entry (⌘Z / ⇧⌘Z).
+- **Selection & inspector** — hit-testing runs through a spatial index; the contextual
+  inspector edits paper color, geometry, event schedule, and image captions.
+- **Search & command palette** — search events, notes, handwriting, and files; ⌘K opens
+  the palette.
+- **Light & dark themes** — the PixiJS scene reads its palette from the Deskbound CSS
+  tokens, so both themes stay single-sourced.
+
+| Year tier (12%) | Dark theme |
+| --- | --- |
+| ![Year view](docs/assets/year-view.png) | ![Dark month view](docs/assets/month-view-dark.png) |
 
 ## 🧭 Architecture
 
@@ -26,7 +47,7 @@ The full decision record lives in [`docs/Infinite-Desk-Calendar-Architecture-Dec
 | Layer | Choice |
 | --- | --- |
 | Application UI | Angular 22 (signals, zoneless) |
-| Spatial renderer | PixiJS 8 (upcoming — see [ROADMAP](ROADMAP.md); the current milestone renders the workspace with DOM) |
+| Spatial renderer | PixiJS 8 (`packages/canvas` — layered scene, month culling, spatial index; design record in [docs/design-canvas-renderer.md](docs/design-canvas-renderer.md)) |
 | Desktop shell | Tauri 2 (upcoming) |
 | Local data | SQLite + filesystem attachments (upcoming) |
 | Design system | Deskbound (`packages/deskbound`) |
@@ -40,7 +61,7 @@ yearleaf/
 │   └── desktop/            Angular application shell
 ├── packages/
 │   ├── domain/             Entities, calendar math, command/undo architecture
-│   ├── canvas/             Date↔world mapping, viewport math, zoom tiers
+│   ├── canvas/             Date↔world layout, viewport math, spatial index, PixiJS scene
 │   ├── deskbound/          Design system: CSS tokens + Angular components
 │   └── persistence/        Storage contracts + in-memory adapter
 └── docs/
@@ -61,11 +82,13 @@ pnpm build          # production build
 pnpm test           # package tests (Vitest) + app tests
 ```
 
-Try it: press `N` for a sticky note, drag it somewhere better, then ⌘Z twice.
+Try it: press `N` for a sticky note, drag it somewhere better, double-click it to
+rewrite it, then Ctrl+Z your way back.
 
 ## 🗺️ Where this is going
 
-See [ROADMAP.md](ROADMAP.md) — next up are the PixiJS workspace renderer, the Tauri shell, and SQLite persistence.
+See [ROADMAP.md](ROADMAP.md) — next up are the Tauri shell and SQLite persistence
+(milestone 3), then editing depth: recurrence, handwriting, and attachment import.
 
 ## Contributing
 

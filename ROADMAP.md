@@ -23,17 +23,23 @@ application — no accounts, no cloud, no sync.
 - [x] Command architecture and universal undo/redo (add, move, delete, payload edit)
 - [x] Light and dark themes; reduced-motion tokens
 
-## Milestone 2 — PixiJS workspace (delivery steps 2–4)
+## Milestone 2 — PixiJS workspace ✅ (delivery steps 2–4)
 
-The current DOM workspace is a faithful stand-in; this milestone moves
-spatial rendering to the canvas package per the architecture boundaries.
+The workspace is now one continuous world rendered by PixiJS 8
+(design record: [docs/design-canvas-renderer.md](docs/design-canvas-renderer.md)):
+months live in fixed world positions (3×4 year blocks), the detail tier
+derives from the zoom level, and month navigation is panning.
 
-- [ ] PixiJS 8 scene with explicit layers (Calendar, Event, Note, Drawing, Attachment, Connector, Interaction)
-- [ ] Calendar grid rendered from the shared date↔world mapping with progressive detail per zoom tier
-- [ ] Viewport culling and a spatial index for hit testing
-- [ ] Selection, movement, resizing, and keyboard navigation against the Pixi scene
-- [ ] DOM overlay editing for text objects (canvas-positioned `textarea`)
-- [ ] Real month navigation (any month, not the pinned September 2026 sample)
+- [x] PixiJS 8 scene with explicit layers (Calendar, Event, Note, Drawing, Attachment, Connector, Interaction)
+- [x] Calendar grid rendered from the shared date↔world mapping with progressive detail per zoom tier
+- [x] Viewport culling (visible-month arithmetic) and a spatial index for hit testing
+- [x] Selection, movement, resizing (SE handle), delete, and arrow-key nudging against the Pixi scene
+- [x] DOM overlay editing for text objects **and sticky notes** (canvas-positioned editor)
+- [x] Real month navigation across all of time (tier presets, focused-month labels, date jumps)
+
+Deferred out of this milestone (tracked in the design record): drawing and
+connector content, bespoke week/day hour-ruler layouts, rotation handle,
+multi-select, and sharper text rasterization at high zoom.
 
 ## Milestone 3 — Desktop shell and persistence (delivery steps 1 & 5)
 

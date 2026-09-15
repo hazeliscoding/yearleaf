@@ -83,8 +83,8 @@ Decorative elements dropped from the mock: the annotation arrow and the sheet hi
 CanvasScene (stage)
 ├── GridLayer          screen-space paper grid (not zoom-scaled)
 └── WorldRoot          position = pan, scale = zoom
-    ├── CalendarLayer  month views, culled by visible month range (arithmetic)
-    ├── EventLayer     event/task/range chips at cell-derived world rects
+    ├── CalendarLayer  month views (incl. their event/task/range chips), culled by visible month range
+    ├── EventLayer     reserved for freely spanning event objects (empty this milestone)
     ├── NoteLayer      stickies and text objects
     ├── DrawingLayer   (empty this milestone — handwriting lands in M4)
     ├── AttachmentLayer images and file chips

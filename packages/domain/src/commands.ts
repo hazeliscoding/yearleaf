@@ -120,6 +120,37 @@ export class MoveObjectCommand implements Command {
   }
 }
 
+/**
+ * Commits the final size of a resized object.
+ *
+ * Like {@link MoveObjectCommand}, this is constructed at gesture end so a
+ * live resize produces exactly one history entry.
+ */
+export class ResizeObjectCommand implements Command {
+  readonly label = 'Resize object';
+
+  /**
+   * @param store - Store holding the object.
+   * @param id - Identifier of the resized object.
+   * @param from - Size when the gesture started.
+   * @param to - Size when the gesture ended.
+   */
+  constructor(
+    private readonly store: DeskObjectStore,
+    private readonly id: string,
+    private readonly from: { width: number; height: number },
+    private readonly to: { width: number; height: number },
+  ) {}
+
+  execute(): void {
+    this.store.update(this.id, { width: this.to.width, height: this.to.height });
+  }
+
+  undo(): void {
+    this.store.update(this.id, { width: this.from.width, height: this.from.height });
+  }
+}
+
 /** Replaces an object's payload, e.g. after editing text or restyling. */
 export class UpdatePayloadCommand implements Command {
   readonly label: string;

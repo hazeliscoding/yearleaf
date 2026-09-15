@@ -4,6 +4,7 @@ import {
   AddObjectCommand,
   DeleteObjectCommand,
   MoveObjectCommand,
+  ResizeObjectCommand,
   UpdatePayloadCommand,
   type DeskObjectStore,
 } from './commands';
@@ -26,7 +27,15 @@ function makeStore(): DeskObjectStore & { objects: Map<string, DeskObject> } {
 }
 
 function sticky(id: string, x = 0, y = 0): DeskObject {
-  return { id, x, y, rotation: 0, payload: { kind: 'sticky', text: 'hi', color: 'yellow' } };
+  return {
+    id,
+    x,
+    y,
+    width: 240,
+    height: 170,
+    rotation: 0,
+    payload: { kind: 'sticky', text: 'hi', color: 'yellow' },
+  };
 }
 
 describe('CommandHistory', () => {
@@ -56,6 +65,20 @@ describe('CommandHistory', () => {
 
     history.undo();
     expect(store.get('a')).toMatchObject({ x: 10, y: 20 });
+  });
+
+  it('collapses a resize into a single command with exact undo', () => {
+    const store = makeStore();
+    const history = new CommandHistory();
+    store.insert(sticky('a'));
+
+    history.execute(
+      new ResizeObjectCommand(store, 'a', { width: 240, height: 170 }, { width: 320, height: 260 }),
+    );
+    expect(store.get('a')).toMatchObject({ width: 320, height: 260 });
+
+    history.undo();
+    expect(store.get('a')).toMatchObject({ width: 240, height: 170 });
   });
 
   it('restores a deleted object on undo', () => {

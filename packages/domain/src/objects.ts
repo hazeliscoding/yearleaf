@@ -96,6 +96,10 @@ export interface DeskObject {
   x: number;
   /** World-space Y of the object's top-left corner. */
   y: number;
+  /** Width in world units. */
+  width: number;
+  /** Height in world units. */
+  height: number;
   /** Rotation in degrees, applied around the object's own origin. */
   rotation: number;
   /** Kind-specific content. */
@@ -116,6 +120,8 @@ export interface EventItem {
   readonly recurring?: boolean;
   /** Show the reminder glyph. */
   readonly reminder?: boolean;
+  /** Secondary detail line shown at close zoom, e.g. `"45 min · video"`. */
+  readonly meta?: string;
 }
 
 /** A checklist task pinned to a day. */

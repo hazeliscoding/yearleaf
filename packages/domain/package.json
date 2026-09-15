@@ -1,0 +1,9 @@
+{
+  "name": "@infinite-desk/domain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Entities, value objects, calendar math, and the command/undo architecture for Infinite Desk Calendar.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

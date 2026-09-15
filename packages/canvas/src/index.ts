@@ -1,10 +1,13 @@
 /**
- * `@infinite-desk/canvas` — spatial workspace math.
+ * `@infinite-desk/canvas` — the spatial workspace: deterministic
+ * date/world layout, viewport math, spatial index, and the PixiJS scene.
  *
- * The first milestone ships the deterministic date/world mapping and the
- * viewport transforms; the PixiJS scene, layers, spatial index, and culling
- * land here next (see ROADMAP.md) without changing these contracts.
+ * Only plain data crosses this package's boundary — PixiJS display objects
+ * never leak to the application (see docs/design-canvas-renderer.md).
  */
 
-export * from './date-mapping';
+export * from './month-layout';
 export * from './viewport';
+export * from './spatial-index';
+export * from './scene/scene-types';
+export * from './scene/scene-controller';

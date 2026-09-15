@@ -23,9 +23,13 @@ export interface Point {
   readonly y: number;
 }
 
-/** Zoom bounds used by the first milestone's workspace. */
-export const MIN_ZOOM = 0.35;
-export const MAX_ZOOM = 1.8;
+/**
+ * Zoom bounds of the workspace. The lower bound sits below the year-fit
+ * zoom (~0.13) so the year tier is reachable; the upper bound gives the
+ * day tier headroom past its 1.5 threshold.
+ */
+export const MIN_ZOOM = 0.08;
+export const MAX_ZOOM = 2;
 
 /**
  * Progressive-detail tiers and the zoom fractions where they switch,
@@ -88,6 +92,24 @@ export function zoomAroundPoint(
     panX: focus.x - (focus.x - state.panX) * scale,
     panY: focus.y - (focus.y - state.panY) * scale,
   };
+}
+
+/**
+ * Zoom that fits a rect inside a viewport with breathing room, clamped to
+ * the workspace zoom bounds.
+ *
+ * @param rect - World-space width/height to fit.
+ * @param view - Viewport width/height in pixels.
+ * @param padding - Fraction of the viewport left as margin (default 6%).
+ */
+export function fitZoom(
+  rect: { width: number; height: number },
+  view: { width: number; height: number },
+  padding = 0.06,
+): number {
+  const usable = 1 - padding;
+  const zoom = Math.min((view.width * usable) / rect.width, (view.height * usable) / rect.height);
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
 }
 
 /**

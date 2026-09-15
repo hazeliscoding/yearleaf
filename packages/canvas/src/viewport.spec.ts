@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  fitZoom,
   panBy,
   screenToWorld,
   tierForZoom,
@@ -37,8 +38,17 @@ describe('viewport transforms', () => {
   });
 
   it('clamps zoom to the configured bounds', () => {
-    expect(zoomAroundPoint(identity, { x: 0, y: 0 }, 100).zoom).toBe(1.8);
-    expect(zoomAroundPoint(identity, { x: 0, y: 0 }, 0.0001).zoom).toBe(0.35);
+    expect(zoomAroundPoint(identity, { x: 0, y: 0 }, 100).zoom).toBe(2);
+    expect(zoomAroundPoint(identity, { x: 0, y: 0 }, 0.0001).zoom).toBe(0.08);
+  });
+
+  it('fits a rect inside a viewport with padding, clamped to zoom bounds', () => {
+    // A year block (~6920×6620) in a 1440×900 viewport lands in the year band.
+    const zoom = fitZoom({ width: 6920, height: 6620 }, { width: 1440, height: 900 });
+    expect(zoom).toBeGreaterThan(0.08);
+    expect(zoom).toBeLessThan(0.35);
+    // A tiny rect clamps to MAX_ZOOM instead of zooming absurdly far in.
+    expect(fitZoom({ width: 10, height: 10 }, { width: 1440, height: 900 })).toBe(2);
   });
 });
 

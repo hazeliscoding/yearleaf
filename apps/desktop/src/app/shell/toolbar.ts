@@ -1,6 +1,10 @@
 /**
- * Top application toolbar: brand, Today, date navigator, tier switcher,
+ * Top application toolbar: brand, Today, date navigator, tier presets,
  * search, command palette trigger, theme toggle, and primary action.
+ *
+ * The tier control reflects the tier *derived* from the current zoom and
+ * applies zoom/position presets when clicked (the workspace is one
+ * continuous world since milestone 2).
  */
 
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
@@ -14,14 +18,6 @@ import {
 
 import { ViewportStore, type Tier } from '../state/viewport-store';
 
-/** Navigator label per tier for the pinned September 2026 sample desk. */
-const TIER_LABELS: Record<Tier, string> = {
-  Day: 'Tuesday, September 15',
-  Week: 'Sep 14 – 20, 2026',
-  Month: 'September 2026',
-  Year: '2026',
-};
-
 @Component({
   selector: 'app-toolbar',
   imports: [DbButton, DbDateNavigator, DbSearchField, DbSegmented],
@@ -34,7 +30,7 @@ const TIER_LABELS: Record<Tier, string> = {
     <span style="font:600 15px var(--font-calendar);margin-right:4px">Deskbound</span>
     <button db-button variant="subtle" (click)="goToday.emit()">Today</button>
     <db-date-navigator
-      [label]="navLabel()"
+      [label]="viewport.navLabel()"
       [zoomLabel]="viewport.tier()"
       (jump)="openPalette.emit()"
     />
@@ -66,7 +62,7 @@ const TIER_LABELS: Record<Tier, string> = {
 })
 export class Toolbar {
   protected readonly viewport = inject(ViewportStore);
-  /** All selectable tiers, closest first. */
+  /** All selectable tier presets, closest first. */
   protected readonly tiers: Tier[] = ['Day', 'Week', 'Month', 'Year'];
 
   /** Whether the dark theme is active (drives the toggle icon). */
@@ -79,9 +75,4 @@ export class Toolbar {
   readonly openPalette = output<void>();
   /** Emits when the theme toggle is clicked. */
   readonly toggleTheme = output<void>();
-
-  /** Navigator label for the active tier. */
-  protected navLabel(): string {
-    return TIER_LABELS[this.viewport.tier()];
-  }
 }

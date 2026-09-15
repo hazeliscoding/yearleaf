@@ -5,7 +5,15 @@ import type { DeskObject } from '@infinite-desk/domain';
 import { InMemoryDeskPersistence } from './desk-persistence';
 
 function sticky(id: string): DeskObject {
-  return { id, x: 0, y: 0, rotation: 0, payload: { kind: 'sticky', text: 'note', color: 'mint' } };
+  return {
+    id,
+    x: 0,
+    y: 0,
+    width: 240,
+    height: 170,
+    rotation: 0,
+    payload: { kind: 'sticky', text: 'note', color: 'mint' },
+  };
 }
 
 describe('InMemoryDeskPersistence', () => {

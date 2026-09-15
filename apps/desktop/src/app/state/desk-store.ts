@@ -20,8 +20,8 @@ export class DeskStore implements DeskObjectStore {
   readonly floats = signal<readonly DeskObject[]>([...INITIAL_FLOATS]);
   /** Layer panel rows. */
   readonly layers = signal<readonly DbLayer[]>([...INITIAL_LAYERS]);
-  /** Day-of-month currently flash-highlighted after a jump, if any. */
-  readonly flashDay = signal<number | null>(null);
+  /** Day currently flash-highlighted after a jump, if any. */
+  readonly flashDate = signal<Date | null>(null);
 
   private flashTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -57,9 +57,9 @@ export class DeskStore implements DeskObjectStore {
   }
 
   /** Flash-highlights a day cell for ~1.8s after a search or Today jump. */
-  flash(day: number): void {
-    this.flashDay.set(day);
+  flash(date: Date): void {
+    this.flashDate.set(date);
     clearTimeout(this.flashTimer);
-    this.flashTimer = setTimeout(() => this.flashDay.set(null), 1800);
+    this.flashTimer = setTimeout(() => this.flashDate.set(null), 1800);
   }
 }

@@ -1,47 +1,42 @@
 /**
- * The spatial workspace: an infinite pannable/zoomable canvas hosting the
- * tier sheets (year/month/week/day) and freely positioned desk objects.
+ * The spatial workspace: hosts the PixiJS scene from
+ * `@infinite-desk/canvas` and owns every pointer gesture against it.
  *
  * Gesture rules follow the architecture guardrails: pointer movement only
- * updates transient state; a finished drag commits exactly one command.
- *
- * Rendering note: this milestone renders the workspace with DOM elements,
- * mirroring the design reference. The PixiJS scene replaces this component's
- * internals in a later milestone (see ROADMAP.md); the viewport math it uses
- * already lives in `@infinite-desk/canvas`.
+ * updates transient scene state; a finished drag or resize commits exactly
+ * one command. Text editing uses a DOM overlay positioned over the object
+ * (the scene hides it meanwhile) per the hybrid editing decision.
  */
 
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
+  afterNextRender,
   computed,
+  effect,
   inject,
   input,
   signal,
+  viewChild,
 } from '@angular/core';
 
-import { screenToWorld, type Point } from '@infinite-desk/canvas';
-import type { DeskObject, EventItem } from '@infinite-desk/domain';
 import {
-  DbFileAttachment,
-  DbImageObject,
-  DbLayerPanel,
-  DbSelectionBox,
-  DbStickyNote,
-  DbTextObject,
-  DbZoomControl,
-} from '@infinite-desk/deskbound';
+  CalendarSceneController,
+  screenToWorld,
+  type Point,
+  type SceneHit,
+  type WorldRect,
+} from '@infinite-desk/canvas';
+import { DbLayerPanel, DbZoomControl } from '@infinite-desk/deskbound';
 
+import { sampleDayContent } from '../data/sample-desk';
 import { DeskActions } from '../state/desk-actions';
 import { DeskStore } from '../state/desk-store';
-import { SelectionStore, type SelectionKind } from '../state/selection-store';
+import { SelectionStore } from '../state/selection-store';
 import { ToolStore } from '../state/tool-store';
 import { ViewportStore } from '../state/viewport-store';
-import { DayPage } from './day-page';
-import { MonthSheet, type EventPick } from './month-sheet';
-import { WeekSheet } from './week-sheet';
-import { YearPlanner } from './year-planner';
 
 /** Transient state of an active object drag. */
 interface DragState {
@@ -49,135 +44,69 @@ interface DragState {
   /** Pointer offset from the object origin, in world units. */
   readonly dx: number;
   readonly dy: number;
-  /** Object origin when the gesture started (for the move command). */
-  readonly fromX: number;
-  readonly fromY: number;
+  readonly from: { x: number; y: number };
 }
 
-/** Transient state of an active pan gesture. */
-interface PanState {
-  readonly startClientX: number;
-  readonly startClientY: number;
-  readonly startPanX: number;
-  readonly startPanY: number;
+/** Transient state of an active resize gesture (southeast handle). */
+interface ResizeState {
+  readonly id: string;
+  readonly from: { width: number; height: number };
+  /** World position of the pointer when the gesture started. */
+  readonly startWorld: Point;
 }
+
+/** Object kinds whose southeast handle resizes them. */
+const RESIZABLE = new Set(['sticky', 'image', 'text']);
+/** Screen-pixel radius around the southeast handle that starts a resize. */
+const HANDLE_RADIUS = 16;
 
 @Component({
   selector: 'app-workspace',
-  imports: [
-    DayPage,
-    DbFileAttachment,
-    DbImageObject,
-    DbLayerPanel,
-    DbSelectionBox,
-    DbStickyNote,
-    DbTextObject,
-    DbZoomControl,
-    MonthSheet,
-    WeekSheet,
-    YearPlanner,
-  ],
+  imports: [DbLayerPanel, DbZoomControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     'data-screen-label': 'Canvas',
     style: 'position:relative;overflow:hidden;background:var(--surface-canvas);display:block',
     '[style.cursor]': 'tools.canvasCursor()',
-    '(pointerdown)': 'onCanvasPointerDown($event)',
-    '(dblclick)': 'onCanvasDoubleClick($event)',
+    '(pointerdown)': 'onPointerDown($event)',
+    '(dblclick)': 'onDoubleClick($event)',
     '(wheel)': 'onWheel($event)',
     '(document:pointermove)': 'onPointerMove($event)',
     '(document:pointerup)': 'onPointerUp()',
   },
   template: `
-    <div
-      style="position:absolute;left:0;top:0;width:1600px;height:1100px;transform-origin:0 0"
-      [style.transform]="viewport.worldTransform()"
-      [style.transition]="viewport.animate() ? 'transform .3s var(--ease-out)' : 'none'"
-    >
+    <canvas
+      #sceneCanvas
+      style="position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none"
+    ></canvas>
+    @if (sceneFailed()) {
       <div
-        style="position:absolute;inset:-1000px;background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);background-size:28px 28px;pointer-events:none"
-      ></div>
-      @switch (viewport.tier()) {
-        @case ('Month') {
-          <div style="animation:tierIn .28s var(--ease-out)">
-            <app-month-sheet (eventPicked)="onEventPicked($event)" />
-            @for (float of desk.floats(); track float.id) {
-              <div
-                style="position:absolute;cursor:grab"
-                [style.left.px]="floatX(float)"
-                [style.top.px]="floatY(float)"
-                [style.transform]="'rotate(' + float.rotation + 'deg)'"
-                (pointerdown)="onFloatPointerDown(float, $event)"
-                (click)="onFloatClick(float, $event)"
-              >
-                @switch (float.payload.kind) {
-                  @case ('sticky') {
-                    <db-selection-box
-                      [selected]="isSelected(float.id)"
-                      [dragging]="drag()?.id === float.id"
-                      [rotatable]="true"
-                    >
-                      <db-sticky-note
-                        [color]="float.payload.color"
-                        [hand]="!!float.payload.hand"
-                        [pinned]="!!float.payload.pinned"
-                        [variant]="float.payload.compact ? 'compact' : 'standard'"
-                        [items]="float.payload.items ?? null"
-                        >{{ float.payload.text }}</db-sticky-note
-                      >
-                    </db-selection-box>
-                  }
-                  @case ('image') {
-                    <db-selection-box [selected]="isSelected(float.id)" [dragging]="drag()?.id === float.id">
-                      <db-image-object [frame]="float.payload.frame" [caption]="float.payload.caption" />
-                    </db-selection-box>
-                  }
-                  @case ('file') {
-                    <db-selection-box [selected]="isSelected(float.id)" [dragging]="drag()?.id === float.id">
-                      <db-file-attachment
-                        [kind]="float.payload.fileKind"
-                        [name]="float.payload.name"
-                        [meta]="float.payload.meta"
-                      />
-                    </db-selection-box>
-                  }
-                  @case ('text') {
-                    @if (float.payload.draft) {
-                      <div
-                        contenteditable="true"
-                        style="font-family:var(--font-hand);font-size:20px;color:var(--ink-primary);min-width:120px;outline:1px dashed var(--selection);padding:2px 6px"
-                        (blur)="onDraftBlur(float, $event)"
-                        (pointerdown)="$event.stopPropagation()"
-                      >
-                        {{ float.payload.text }}
-                      </div>
-                    } @else {
-                      <db-text-object
-                        [state]="isSelected(float.id) ? 'selected' : 'idle'"
-                        [hand]="true"
-                        style="font-size:20px"
-                        >{{ float.payload.text }}</db-text-object
-                      >
-                    }
-                  }
-                }
-              </div>
-            }
-          </div>
-        }
-        @case ('Week') {
-          <div style="animation:tierIn .28s var(--ease-out)"><app-week-sheet /></div>
-        }
-        @case ('Day') {
-          <div style="animation:tierIn .28s var(--ease-out)"><app-day-page /></div>
-        }
-        @case ('Year') {
-          <div style="animation:tierIn .28s var(--ease-out)">
-            <app-year-planner (monthPicked)="viewport.fitTier('Month')" />
-          </div>
-        }
-      }
-    </div>
+        style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:var(--text-body);color:var(--ink-muted)"
+      >
+        The canvas could not start — this environment has no WebGL support.
+      </div>
+    }
+    @if (editor(); as edit) {
+      <textarea
+        #editArea
+        aria-label="Edit text"
+        [value]="edit.text"
+        (blur)="commitEditor($event)"
+        (keydown.escape)="$any($event.target).blur(); $event.stopPropagation()"
+        (pointerdown)="$event.stopPropagation()"
+        [style.left.px]="edit.left"
+        [style.top.px]="edit.top"
+        [style.width.px]="edit.width"
+        [style.height.px]="edit.height"
+        [style.font-size.px]="edit.fontSize"
+        [style.line-height.px]="edit.lineHeight"
+        [style.padding.px]="edit.padding"
+        [style.background]="edit.background"
+        [style.color]="edit.color"
+        [style.font-family]="edit.fontFamily"
+        style="position:absolute;box-sizing:border-box;border:none;outline:1.5px dashed var(--selection);resize:none;overflow:hidden;border-radius:3px"
+      ></textarea>
+    }
     <div style="position:absolute;left:20px;bottom:16px">
       <db-zoom-control
         [zoom]="viewport.zoomPercent()"
@@ -201,35 +130,126 @@ export class Workspace {
   protected readonly selection = inject(SelectionStore);
   private readonly actions = inject(DeskActions);
   private readonly host = inject(ElementRef).nativeElement as HTMLElement;
+  private readonly destroyRef = inject(DestroyRef);
+
+  private readonly sceneCanvas = viewChild.required<ElementRef<HTMLCanvasElement>>('sceneCanvas');
+  private readonly editArea = viewChild<ElementRef<HTMLTextAreaElement>>('editArea');
 
   /** Whether the floating layer panel is visible (hidden under overlays). */
   readonly showLayers = input(true);
 
-  /** Active object drag, or `null`. */
-  protected readonly drag = signal<DragState | null>(null);
-  /** Transient dragged position (world units) while a drag is live. */
-  private readonly dragPosition = signal<Point | null>(null);
-  /** Active pan gesture, or `null`. */
-  private pan: PanState | null = null;
+  /** The scene controller; PixiJS never leaks past it. */
+  private readonly scene = new CalendarSceneController();
+  protected readonly sceneReady = signal(false);
+  protected readonly sceneFailed = signal(false);
 
-  /** Selected float id, memoized for the template. */
-  private readonly selectedId = computed(() => this.selection.selection()?.id ?? null);
+  /** Object id currently edited through the DOM overlay, if any. */
+  protected readonly editingId = signal<string | null>(null);
+  /** Select-all on focus (used for freshly created draft text). */
+  private selectAllOnFocus = false;
 
-  /** `true` when the given float is the current selection. */
-  protected isSelected(id: string): boolean {
-    return this.selectedId() === id;
+  private drag: DragState | null = null;
+  private resizeGesture: ResizeState | null = null;
+  private transientRect: WorldRect | null = null;
+  private pan: { startClientX: number; startClientY: number; startPanX: number; startPanY: number } | null = null;
+
+  /** Screen-space geometry and styling of the DOM text editor. */
+  protected readonly editor = computed(() => {
+    const id = this.editingId();
+    if (!id) return null;
+    const object = this.desk.floats().find((f) => f.id === id);
+    if (!object) return null;
+    const v = this.viewport.viewport();
+    const sticky = object.payload.kind === 'sticky' ? object.payload : null;
+    const compact = !!sticky?.compact;
+    const baseFont = sticky ? (compact ? 22 : 26) : 30;
+    const baseLine = sticky ? (compact ? 26 : 32) : 38;
+    const hand = sticky ? !!sticky.hand : true;
+    return {
+      text:
+        object.payload.kind === 'sticky' || object.payload.kind === 'text'
+          ? object.payload.text
+          : '',
+      left: v.panX + object.x * v.zoom,
+      top: v.panY + object.y * v.zoom,
+      width: object.width * v.zoom,
+      height: object.height * v.zoom,
+      fontSize: baseFont * v.zoom,
+      lineHeight: baseLine * v.zoom,
+      padding: (sticky ? (compact ? 14 : 20) : 4) * v.zoom,
+      background: sticky ? `var(--stationery-${sticky.color})` : 'transparent',
+      color: sticky ? `var(--stationery-${sticky.color}-ink)` : 'var(--ink-primary)',
+      fontFamily: hand ? 'var(--font-hand)' : 'var(--font-ui)',
+    };
+  });
+
+  constructor() {
+    afterNextRender(() => void this.startScene());
+
+    // Push reactive state into the scene once it is ready. Each effect
+    // reads `sceneReady` so it re-fires with current values on startup.
+    effect(() => {
+      const v = this.viewport.viewport();
+      if (this.sceneReady()) this.scene.setViewport(v);
+    });
+    effect(() => {
+      const floats = this.desk.floats();
+      if (this.sceneReady()) this.scene.setObjects(floats);
+    });
+    effect(() => {
+      const id = this.selection.selection()?.id ?? null;
+      if (this.sceneReady()) this.scene.setSelection(id);
+    });
+    effect(() => {
+      const id = this.editingId();
+      if (this.sceneReady()) this.scene.setEditing(id);
+    });
+    effect(() => {
+      const date = this.desk.flashDate();
+      if (this.sceneReady()) this.scene.setFlashDate(date);
+    });
+
+    this.destroyRef.onDestroy(() => this.scene.destroy());
   }
 
-  /** Rendered X of a float, honoring the transient drag position. */
-  protected floatX(float: DeskObject): number {
-    const dragging = this.drag();
-    return dragging?.id === float.id ? (this.dragPosition()?.x ?? float.x) : float.x;
-  }
+  /** Boots the renderer; degrades to a notice when WebGL is unavailable. */
+  private async startScene(): Promise<void> {
+    const width = this.host.clientWidth || 1;
+    const height = this.host.clientHeight || 1;
+    try {
+      await this.scene.init({
+        canvas: this.sceneCanvas().nativeElement,
+        width,
+        height,
+        dayContent: sampleDayContent,
+        today: new Date(),
+      });
+    } catch (error) {
+      console.warn('Canvas scene unavailable:', error);
+      this.sceneFailed.set(true);
+      return;
+    }
+    this.viewport.setViewSize(width, height);
+    this.sceneReady.set(true);
 
-  /** Rendered Y of a float, honoring the transient drag position. */
-  protected floatY(float: DeskObject): number {
-    const dragging = this.drag();
-    return dragging?.id === float.id ? (this.dragPosition()?.y ?? float.y) : float.y;
+    const resizeObserver = new ResizeObserver(() => {
+      const w = this.host.clientWidth;
+      const h = this.host.clientHeight;
+      if (w > 0 && h > 0) {
+        this.scene.resize(w, h);
+        this.viewport.setViewSize(w, h);
+      }
+    });
+    resizeObserver.observe(this.host);
+    this.destroyRef.onDestroy(() => resizeObserver.disconnect());
+
+    // Repaint with the new palette whenever the app toggles `data-theme`.
+    const themeObserver = new MutationObserver(() => this.scene.refreshTheme());
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    this.destroyRef.onDestroy(() => themeObserver.disconnect());
   }
 
   /** Converts a pointer event to world coordinates. */
@@ -241,27 +261,71 @@ export class Workspace {
     });
   }
 
-  /** Starts panning from empty canvas, or anywhere with space/Pan tool. */
-  protected onCanvasPointerDown(event: PointerEvent): void {
+  /** Starts a pan, drag, or resize depending on what is under the pointer. */
+  protected onPointerDown(event: PointerEvent): void {
+    if (event.button !== 0) return;
+    const world = this.toWorld(event);
     const panAnywhere = this.tools.spaceHeld() || this.tools.active() === 'Pan';
-    if (event.target === this.host || panAnywhere) {
-      const { panX, panY } = this.viewport.viewport();
-      this.pan = {
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        startPanX: panX,
-        startPanY: panY,
+    const hit = !panAnywhere && this.sceneReady() ? this.scene.hitTest(world) : null;
+
+    if (hit?.kind === 'object') {
+      const object = this.desk.get(hit.id);
+      if (!object) return;
+      const selected = this.selection.selection()?.id === hit.id;
+      if (selected && RESIZABLE.has(object.payload.kind) && this.nearSoutheast(object, world)) {
+        this.resizeGesture = {
+          id: hit.id,
+          from: { width: object.width, height: object.height },
+          startWorld: world,
+        };
+        return;
+      }
+      this.selection.select(object.payload.kind, hit.id);
+      this.drag = {
+        id: hit.id,
+        dx: world.x - object.x,
+        dy: world.y - object.y,
+        from: { x: object.x, y: object.y },
       };
-      this.tools.panning.set(true);
-      this.selection.clear();
+      return;
     }
+
+    if (hit?.kind === 'event') {
+      this.selectEvent(hit);
+      return;
+    }
+
+    // Empty paper (cell or open desk): pan and deselect.
+    const { panX, panY } = this.viewport.viewport();
+    this.pan = {
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPanX: panX,
+      startPanY: panY,
+    };
+    this.tools.panning.set(true);
+    this.selection.clear();
   }
 
-  /** Double-click on empty canvas starts a new text object (Month tier). */
-  protected onCanvasDoubleClick(event: MouseEvent): void {
-    if (event.target !== this.host || this.viewport.tier() !== 'Month') return;
+  /** Double-click edits editable objects or writes on empty paper. */
+  protected onDoubleClick(event: MouseEvent): void {
+    if (!this.sceneReady()) return;
     const world = this.toWorld(event);
-    this.actions.addDraftText(Math.round(world.x), Math.round(world.y));
+    const hit = this.scene.hitTest(world);
+
+    if (hit?.kind === 'object') {
+      const object = this.desk.get(hit.id);
+      if (!object) return;
+      const editable =
+        object.payload.kind === 'text' ||
+        (object.payload.kind === 'sticky' && !object.payload.items?.length);
+      if (editable) this.openEditor(hit.id, false);
+      return;
+    }
+    if (hit?.kind === 'event') return;
+
+    const id = this.actions.addDraftText(Math.round(world.x), Math.round(world.y));
+    this.openEditor(id, true);
   }
 
   /** Ctrl/⌘ + wheel zooms around the cursor; plain wheel pans. */
@@ -278,36 +342,30 @@ export class Workspace {
     }
   }
 
-  /** Begins a float drag; movement stays transient until pointer-up. */
-  protected onFloatPointerDown(float: DeskObject, event: PointerEvent): void {
-    if (this.tools.spaceHeld() || this.tools.active() === 'Pan') return;
-    event.stopPropagation();
-    const world = this.toWorld(event);
-    this.drag.set({
-      id: float.id,
-      dx: world.x - float.x,
-      dy: world.y - float.y,
-      fromX: float.x,
-      fromY: float.y,
-    });
-    this.dragPosition.set({ x: float.x, y: float.y });
-  }
-
-  /** Selects a float (click fires after pointer-up). */
-  protected onFloatClick(float: DeskObject, event: Event): void {
-    event.stopPropagation();
-    this.selection.select(float.payload.kind as SelectionKind, float.id);
-  }
-
-  /** Advances the live drag or pan gesture. */
+  /** Advances the live drag, resize, or pan gesture (transient only). */
   protected onPointerMove(event: PointerEvent): void {
-    const dragging = this.drag();
-    if (dragging) {
+    if (this.drag) {
       const world = this.toWorld(event);
-      this.dragPosition.set({
-        x: Math.round(world.x - dragging.dx),
-        y: Math.round(world.y - dragging.dy),
-      });
+      const object = this.desk.get(this.drag.id);
+      if (!object) return;
+      this.transientRect = {
+        x: Math.round(world.x - this.drag.dx),
+        y: Math.round(world.y - this.drag.dy),
+        width: object.width,
+        height: object.height,
+      };
+      this.scene.setTransient(this.drag.id, this.transientRect);
+    } else if (this.resizeGesture) {
+      const world = this.toWorld(event);
+      const object = this.desk.get(this.resizeGesture.id);
+      if (!object) return;
+      this.transientRect = {
+        x: object.x,
+        y: object.y,
+        width: Math.max(120, Math.round(this.resizeGesture.from.width + world.x - this.resizeGesture.startWorld.x)),
+        height: Math.max(64, Math.round(this.resizeGesture.from.height + world.y - this.resizeGesture.startWorld.y)),
+      };
+      this.scene.setTransient(this.resizeGesture.id, this.transientRect);
     } else if (this.pan) {
       this.viewport.panTo(
         this.pan.startPanX + (event.clientX - this.pan.startClientX),
@@ -316,34 +374,66 @@ export class Workspace {
     }
   }
 
-  /** Ends the gesture; a real drag commits exactly one move command. */
+  /** Ends the gesture; a real drag/resize commits exactly one command. */
   protected onPointerUp(): void {
-    const dragging = this.drag();
-    const position = this.dragPosition();
-    if (dragging && position) {
-      this.actions.commitMove(
-        dragging.id,
-        { x: dragging.fromX, y: dragging.fromY },
-        { x: position.x, y: position.y },
-      );
+    if (this.drag && this.transientRect) {
+      this.actions.commitMove(this.drag.id, this.drag.from, {
+        x: this.transientRect.x,
+        y: this.transientRect.y,
+      });
+      this.scene.setTransient(this.drag.id, null);
+    } else if (this.resizeGesture && this.transientRect) {
+      this.actions.commitResize(this.resizeGesture.id, this.resizeGesture.from, {
+        width: this.transientRect.width,
+        height: this.transientRect.height,
+      });
+      this.scene.setTransient(this.resizeGesture.id, null);
     }
-    this.drag.set(null);
-    this.dragPosition.set(null);
+    this.drag = null;
+    this.resizeGesture = null;
+    this.transientRect = null;
     this.pan = null;
     if (this.tools.panning()) this.tools.panning.set(false);
   }
 
-  /** A clicked calendar event becomes the inspected selection. */
-  protected onEventPicked(pick: EventPick): void {
-    this.selection.select('event', `${pick.day}-${pick.event.title}`);
-    this.selection.eventTitle.set(pick.event.title);
-    this.selection.eventTime.set(pick.event.time ?? 'All day');
-    this.selection.eventColor.set(`--stationery-${pick.event.color}`);
+  /** Commits the DOM editor's content as one command and closes it. */
+  protected commitEditor(event: FocusEvent): void {
+    const id = this.editingId();
+    if (!id) return;
+    const text = (event.target as HTMLTextAreaElement).value;
+    const object = this.desk.get(id);
+    if (object?.payload.kind === 'text') this.actions.commitTextEdit(id, text);
+    else if (object?.payload.kind === 'sticky') this.actions.setStickyText(id, text);
+    this.editingId.set(null);
   }
 
-  /** Draft text loses focus → commit its content as one command. */
-  protected onDraftBlur(float: DeskObject, event: FocusEvent): void {
-    const text = (event.target as HTMLElement).textContent ?? '';
-    this.actions.commitDraftText(float.id, text);
+  /** Opens the DOM editor over an object and focuses it. */
+  private openEditor(id: string, selectAll: boolean): void {
+    this.selectAllOnFocus = selectAll;
+    this.editingId.set(id);
+    setTimeout(() => {
+      const area = this.editArea()?.nativeElement;
+      if (!area) return;
+      area.focus();
+      if (this.selectAllOnFocus) area.select();
+    }, 30);
+  }
+
+  /** `true` when the pointer is within handle range of the SE corner. */
+  private nearSoutheast(object: { x: number; y: number; width: number; height: number }, world: Point): boolean {
+    const radius = HANDLE_RADIUS / this.viewport.viewport().zoom;
+    const dx = world.x - (object.x + object.width);
+    const dy = world.y - (object.y + object.height);
+    return Math.hypot(dx, dy) <= radius;
+  }
+
+  /** A clicked calendar chip becomes the inspected event selection. */
+  private selectEvent(hit: Extract<SceneHit, { kind: 'event' }>): void {
+    const event = sampleDayContent(hit.date)?.events?.[hit.index];
+    if (!event) return;
+    this.selection.select('event', hit.id);
+    this.selection.eventTitle.set(event.title);
+    this.selection.eventTime.set(event.time ?? 'All day');
+    this.selection.eventColor.set(`--stationery-${event.color}`);
   }
 }

@@ -8,20 +8,21 @@ describe('App', () => {
     await TestBed.configureTestingModule({ imports: [App] }).compileComponents();
   });
 
-  it('renders the shell with toolbar brand, tool rail, and workspace', async () => {
+  it('renders the shell with toolbar brand, tool rail, and workspace canvas', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const element = fixture.nativeElement as HTMLElement;
     expect(element.textContent).toContain('Deskbound');
     expect(element.querySelector('app-tool-rail')).toBeTruthy();
-    expect(element.querySelector('app-workspace')).toBeTruthy();
+    expect(element.querySelector('app-workspace canvas')).toBeTruthy();
   });
 
-  it('renders the September 2026 month sheet by default', async () => {
+  it('shows the derived tier and navigation label in the toolbar', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.textContent).toContain('September');
-    expect(element.querySelector('app-month-sheet')).toBeTruthy();
+    // Default viewport starts at the month preset over the focused month.
+    expect(element.querySelector('db-date-navigator')?.textContent).toContain('20');
+    expect(element.querySelector('db-segmented')).toBeTruthy();
   });
 });

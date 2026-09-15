@@ -8,7 +8,9 @@ import { Injectable, inject } from '@angular/core';
 
 import {
   AddObjectCommand,
+  DeleteObjectCommand,
   MoveObjectCommand,
+  ResizeObjectCommand,
   UpdatePayloadCommand,
   type DeskObject,
   type StationeryColor,
@@ -24,35 +26,41 @@ export class DeskActions {
   private readonly history = inject(HistoryStore);
   private readonly selection = inject(SelectionStore);
 
-  /** Adds a new handwritten sticky note near the sheet and selects it. */
-  addSticky(): void {
+  /** Adds a new handwritten sticky note near a world position; selects it. */
+  addSticky(near: { x: number; y: number }): string {
     const count = this.desk.floats().length;
     const object: DeskObject = {
       id: `new${Date.now()}`,
-      x: 520 + (count % 3) * 40,
-      y: 660,
+      x: near.x + (count % 3) * 30,
+      y: near.y + (count % 3) * 24,
+      width: 260,
+      height: 180,
       rotation: -1 + Math.random() * 2,
       payload: { kind: 'sticky', text: 'new note', color: 'yellow', hand: true },
     };
     this.history.execute(new AddObjectCommand(this.desk, object));
     this.selection.select('sticky', object.id);
+    return object.id;
   }
 
   /** Creates a draft text object at a world position (double-click to write). */
-  addDraftText(x: number, y: number): void {
+  addDraftText(x: number, y: number): string {
     const object: DeskObject = {
       id: `txt${Date.now()}`,
       x,
       y,
+      width: 420,
+      height: 90,
       rotation: 0,
       payload: { kind: 'text', text: 'start typing…', draft: true },
     };
     this.history.execute(new AddObjectCommand(this.desk, object));
     this.selection.select('text', object.id);
+    return object.id;
   }
 
-  /** Commits the edited text of a draft object and ends its draft state. */
-  commitDraftText(id: string, text: string): void {
+  /** Commits an edited text object's content and ends its draft state. */
+  commitTextEdit(id: string, text: string): void {
     const object = this.desk.get(id);
     if (!object || object.payload.kind !== 'text') return;
     this.history.execute(
@@ -64,10 +72,46 @@ export class DeskActions {
     );
   }
 
+  /** Commits an edited sticky note's text. */
+  setStickyText(id: string, text: string): void {
+    const object = this.desk.get(id);
+    if (!object || object.payload.kind !== 'sticky') return;
+    this.history.execute(
+      new UpdatePayloadCommand(this.desk, id, object.payload, {
+        ...object.payload,
+        text: text.trim(),
+      }),
+    );
+  }
+
   /** Commits a finished drag as one undoable move. */
   commitMove(id: string, from: { x: number; y: number }, to: { x: number; y: number }): void {
     if (from.x === to.x && from.y === to.y) return;
     this.history.execute(new MoveObjectCommand(this.desk, id, from, to));
+  }
+
+  /** Commits a finished resize gesture as one undoable command. */
+  commitResize(
+    id: string,
+    from: { width: number; height: number },
+    to: { width: number; height: number },
+  ): void {
+    if (from.width === to.width && from.height === to.height) return;
+    this.history.execute(new ResizeObjectCommand(this.desk, id, from, to));
+  }
+
+  /** Deletes an object (undoable) and clears the selection if it was selected. */
+  deleteObject(id: string): void {
+    if (!this.desk.get(id)) return;
+    this.history.execute(new DeleteObjectCommand(this.desk, id));
+    if (this.selection.selection()?.id === id) this.selection.clear();
+  }
+
+  /** Nudges an object by a delta as one undoable move (arrow keys). */
+  nudge(id: string, dx: number, dy: number): void {
+    const object = this.desk.get(id);
+    if (!object) return;
+    this.commitMove(id, { x: object.x, y: object.y }, { x: object.x + dx, y: object.y + dy });
   }
 
   /** Recolors a sticky note (inspector color picker). */

@@ -17,11 +17,14 @@ import { DeskStore } from './state/desk-store';
 import { HistoryStore } from './state/history-store';
 import { SelectionStore } from './state/selection-store';
 import { ToolStore } from './state/tool-store';
-import { ViewportStore } from './state/viewport-store';
+import { ViewportStore, type Tier } from './state/viewport-store';
 import { Workspace } from './workspace/workspace';
 
 /** Tool labels reachable through single-key shortcuts. */
 const TOOL_KEYS: Record<string, string> = { v: 'Select', h: 'Pan', t: 'Text', p: 'Pen' };
+/** Arrow-key nudge distances in world units (plain / shift). */
+const NUDGE = 16;
+const NUDGE_LARGE = 64;
 
 @Component({
   selector: 'app-root',
@@ -30,7 +33,6 @@ const TOOL_KEYS: Record<string, string> = { v: 'Select', h: 'Pan', t: 'Text', p:
   host: {
     style:
       'display:grid;grid-template-rows:44px 1fr;grid-template-columns:44px 1fr auto;height:100vh;background:var(--surface-canvas)',
-    '(click)': 'selection.clear()',
     '(document:keydown)': 'onKeyDown($event)',
     '(document:keyup)': 'onKeyUp($event)',
   },
@@ -46,7 +48,7 @@ const TOOL_KEYS: Record<string, string> = { v: 'Select', h: 'Pan', t: 'Text', p:
     <div style="position:relative;overflow:hidden">
       <app-workspace style="position:absolute;inset:0" [showLayers]="!paletteOpen() && !searchOpen()" />
       @if (searchOpen()) {
-        <app-search-overlay (closed)="searchOpen.set(false)" (jumped)="jumpToDay($event)" />
+        <app-search-overlay (closed)="searchOpen.set(false)" (jumped)="jumpToSeptemberDay($event)" />
       }
       @if (paletteOpen()) {
         <div
@@ -90,21 +92,33 @@ export class App {
     effect(() => {
       document.documentElement.dataset['theme'] = this.dark() ? 'dark' : '';
     });
+
+    // Dev/e2e affordance: `?tier=Year&theme=dark` applies a startup state
+    // so headless screenshots can reach any view without interaction.
+    const params = new URLSearchParams(location.search);
+    if (params.get('theme') === 'dark') this.dark.set(true);
+    const tier = params.get('tier');
+    if (tier === 'Day' || tier === 'Week' || tier === 'Month' || tier === 'Year') {
+      this.viewport.initialTier = tier as Tier;
+    }
   }
 
-  /** Jumps home to today: month tier, refit, and a flash on today's cell. */
+  /** Jumps home: centers today's cell and flashes it. */
   protected goToday(): void {
-    const now = new Date();
-    const day = now.getFullYear() === 2026 && now.getMonth() === 8 ? now.getDate() : 15;
-    this.jumpToDay(day);
+    this.jumpToDate(new Date());
   }
 
-  /** Closes overlays, refits the month sheet, and flashes the target day. */
-  protected jumpToDay(day: number): void {
+  /** Closes overlays, centers the target day, and flashes it. */
+  protected jumpToDate(date: Date): void {
     this.searchOpen.set(false);
     this.paletteOpen.set(false);
-    this.viewport.fitTier('Month');
-    this.desk.flash(day);
+    this.viewport.centerOnDate(date);
+    this.desk.flash(date);
+  }
+
+  /** Search results reference days of the September 2026 sample desk. */
+  protected jumpToSeptemberDay(day: number): void {
+    this.jumpToDate(new Date(2026, 8, day));
   }
 
   protected openSearch(): void {
@@ -117,15 +131,24 @@ export class App {
     this.searchOpen.set(false);
   }
 
-  /** Executes the few palette rows that are wired in this milestone. */
+  /** Executes the palette rows that are wired in this milestone. */
   protected runPaletteItem(item: DbPaletteItem): void {
     this.paletteOpen.set(false);
     switch (item.label) {
       case 'Today':
         this.goToday();
         break;
+      case 'Next Friday':
+        this.jumpToSeptemberDay(18);
+        break;
+      case 'October 2026':
+        this.viewport.fitMonthOf(2026, 9);
+        break;
+      case 'Jump to Kyoto trip':
+        this.jumpToSeptemberDay(17);
+        break;
       case 'New sticky note':
-        this.actions.addSticky();
+        this.actions.addSticky(this.viewport.centerWorld());
         break;
       case 'Fit month':
         this.viewport.fitTier('Month');
@@ -136,7 +159,7 @@ export class App {
     }
   }
 
-  /** Global shortcuts: ⌘K, Escape, space-pan, undo/redo, tools, N. */
+  /** Global shortcuts: ⌘K, Escape, space-pan, undo/redo, tools, N, Delete, arrows. */
   protected onKeyDown(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
     const tag = (target.tagName || '').toLowerCase();
@@ -167,9 +190,25 @@ export class App {
       this.tools.spaceHeld.set(true);
       return;
     }
+
+    const selected = this.selection.selection();
+    const selectedObject = selected && selected.kind !== 'event' ? selected.id : null;
+    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedObject) {
+      this.actions.deleteObject(selectedObject);
+      return;
+    }
+    if (event.key.startsWith('Arrow') && selectedObject) {
+      event.preventDefault();
+      const step = event.shiftKey ? NUDGE_LARGE : NUDGE;
+      const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0;
+      const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
+      this.actions.nudge(selectedObject, dx, dy);
+      return;
+    }
+
     const key = event.key.toLowerCase();
     if (key === 'n') {
-      this.actions.addSticky();
+      this.actions.addSticky(this.viewport.centerWorld());
       return;
     }
     const tool = TOOL_KEYS[key];

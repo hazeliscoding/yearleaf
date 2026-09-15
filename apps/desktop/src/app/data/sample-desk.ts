@@ -6,23 +6,24 @@
  * per the testing strategy's "lived-in desks" requirement.
  */
 
-import type {
-  DeskObject,
-  EventItem,
-  RangeSegment,
-  TaskItem,
-} from '@infinite-desk/domain';
+import { MONTH_STRIDE_X, monthOrigin, type DayContent } from '@infinite-desk/canvas';
+import type { DeskObject } from '@infinite-desk/domain';
 import type { DbLayer, DbPaletteGroup } from '@infinite-desk/deskbound';
 
-/** Everything the month sheet renders inside one day cell. */
-export interface DayContent {
-  readonly events?: readonly EventItem[];
-  readonly tasks?: readonly TaskItem[];
-  readonly range?: RangeSegment;
-  /** Handwritten scribble shown in the handwriting typeface. */
-  readonly hand?: string;
-  /** Caption of a small taped photo in the cell. */
-  readonly img?: string;
+export type { DayContent };
+
+/** World origin of the sample month (September 2026). */
+const SEPT = monthOrigin(2026, 8);
+/** Open desk space east of the calendar columns where the floats live. */
+const DESK_X = 3 * MONTH_STRIDE_X + 80;
+
+/**
+ * Day-content provider for the scene: the lived-in September 2026 sample.
+ * Every other month renders as empty paper.
+ */
+export function sampleDayContent(date: Date): DayContent | null {
+  if (date.getFullYear() !== 2026 || date.getMonth() !== 8) return null;
+  return MONTH_CONTENT[date.getDate()] ?? null;
 }
 
 /** Day-of-month → cell content for September 2026. */
@@ -37,8 +38,8 @@ export const MONTH_CONTENT: Readonly<Record<number, DayContent>> = {
   5: { img: 'trail run' },
   8: {
     events: [
-      { time: '09:30', title: 'Client review', color: 'blue', recurring: true },
-      { time: '18:00', title: 'Ceramics class', color: 'olive' },
+      { time: '09:30', title: 'Client review', color: 'blue', recurring: true, meta: '45 min · video' },
+      { time: '18:00', title: 'Ceramics class', color: 'olive', meta: 'Studio B' },
     ],
   },
   10: { events: [{ time: '20:00', title: 'Nils Frahm', color: 'rose' }] },
@@ -47,7 +48,14 @@ export const MONTH_CONTENT: Readonly<Record<number, DayContent>> = {
   14: { events: [{ time: '09:30', title: 'Client review', color: 'blue', recurring: true }] },
   15: {
     events: [
-      { time: '14:00', title: 'Dentist', color: 'teal', variant: 'tentative', reminder: true },
+      {
+        time: '14:00',
+        title: 'Dentist',
+        color: 'teal',
+        variant: 'tentative',
+        reminder: true,
+        meta: 'Dr. Okada · 20 min walk',
+      },
     ],
     tasks: [{ label: 'Order paper stock' }],
   },
@@ -71,12 +79,14 @@ export const MONTH_CONTENT: Readonly<Record<number, DayContent>> = {
   30: { tasks: [{ label: 'Finish book', due: '30th' }] },
 };
 
-/** Freely positioned objects on the desk beside the month sheet. */
+/** Freely positioned objects parked on the open desk beside September 2026. */
 export const INITIAL_FLOATS: readonly DeskObject[] = [
   {
     id: 's1',
-    x: 1120,
-    y: 56,
+    x: DESK_X,
+    y: SEPT.y + 40,
+    width: 260,
+    height: 190,
     rotation: 0,
     payload: {
       kind: 'sticky',
@@ -88,8 +98,10 @@ export const INITIAL_FLOATS: readonly DeskObject[] = [
   },
   {
     id: 's2',
-    x: 1150,
-    y: 250,
+    x: DESK_X + 40,
+    y: SEPT.y + 290,
+    width: 260,
+    height: 140,
     rotation: -1.5,
     payload: {
       kind: 'sticky',
@@ -104,8 +116,10 @@ export const INITIAL_FLOATS: readonly DeskObject[] = [
   },
   {
     id: 's3',
-    x: 1118,
-    y: 432,
+    x: DESK_X + 10,
+    y: SEPT.y + 490,
+    width: 190,
+    height: 130,
     rotation: 1,
     payload: {
       kind: 'sticky',
@@ -117,22 +131,28 @@ export const INITIAL_FLOATS: readonly DeskObject[] = [
   },
   {
     id: 'img1',
-    x: 1130,
-    y: 560,
+    x: DESK_X + 20,
+    y: SEPT.y + 680,
+    width: 220,
+    height: 178,
     rotation: 0,
     payload: { kind: 'image', frame: 'taped', caption: 'moodboard' },
   },
   {
     id: 'f1',
-    x: 1140,
-    y: 760,
+    x: DESK_X + 20,
+    y: SEPT.y + 920,
+    width: 300,
+    height: 64,
     rotation: 0,
     payload: { kind: 'file', fileKind: 'pdf', name: 'Fair-floorplan.pdf', meta: '1.2 MB' },
   },
   {
     id: 't1',
-    x: 120,
-    y: 840,
+    x: DESK_X,
+    y: SEPT.y + 1050,
+    width: 470,
+    height: 90,
     rotation: 0,
     payload: { kind: 'text', text: 'don’t forget: fair setup starts the 24th' },
   },
@@ -200,27 +220,3 @@ export const PALETTE_GROUPS: readonly DbPaletteGroup[] = [
   },
 ];
 
-/** A positioned, expanded event block on the week sheet. */
-export interface WeekBlock {
-  /** Week column (0 = Monday). */
-  readonly col: number;
-  /** Start hour as a decimal, e.g. `9.5` for 09:30. */
-  readonly hour: number;
-  readonly event: EventItem & { readonly meta: string };
-}
-
-/** Expanded event blocks for the week of Sep 14–20. */
-export const WEEK_BLOCKS: readonly WeekBlock[] = [
-  { col: 0, hour: 9.5, event: { time: '09:30', title: 'Client review', color: 'blue', recurring: true, meta: '45 min · video' } },
-  { col: 1, hour: 14, event: { time: '14:00', title: 'Dentist', color: 'teal', variant: 'tentative', reminder: true, meta: 'Dr. Okada' } },
-  { col: 2, hour: 18, event: { time: '18:00', title: 'Ceramics class', color: 'olive', meta: 'Studio B' } },
-  { col: 4, hour: 19, event: { time: '19:00', title: 'Anniversary dinner', color: 'coral', meta: 'table for two' } },
-  { col: 5, hour: 9, event: { time: '09:00', title: 'Hike — Mt. Tam', color: 'green', meta: 'trailhead 8:40' } },
-];
-
-/** Tasks listed on the day page. */
-export const DAY_TASKS: readonly TaskItem[] = [
-  { label: 'Order paper stock', priority: 'high' },
-  { label: 'Send files to printer', due: 'by 5pm' },
-  { label: 'Reply to fair organizers', done: true },
-];

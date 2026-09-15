@@ -1,0 +1,17 @@
+{
+  "name": "yearleaf",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Infinite Desk Calendar — a local-first spatial calendar where time is an infinite canvas.",
+  "packageManager": "pnpm@12.4.2",
+  "scripts": {
+    "dev": "pnpm --filter desktop start",
+    "build": "pnpm --filter desktop build",
+    "test": "pnpm run test:packages && pnpm --filter desktop test",
+    "test:packages": "vitest run --config vitest.packages.config.ts"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.2",
+    "vitest": "^4.0.8"
+  }
+}

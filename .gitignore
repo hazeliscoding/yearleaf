@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+out/
+.angular/
+coverage/
+src-tauri/target/
+
+# Environment & local config
+.env
+.env.*
+*.local
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+*.suo
+*.user
+
+# AI tooling — never committed to this repository
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.cursor/
+.cursorrules
+.cursorignore
+.windsurf/
+.windsurfrules
+.aider*
+.copilot/
+.github/copilot-instructions.md
+.mcp.json
+.codeium/
+.continue/

@@ -1,0 +1,19 @@
+:root{
+/* Roles: ui = chrome/controls, calendar = dates/titles (printed slab), hand = user writing */
+--text-display:600 44px/1.08 var(--font-calendar);
+--text-month-title:600 30px/1.12 var(--font-calendar);
+--text-heading:600 19px/1.25 var(--font-ui);
+--text-subheading:600 15px/1.35 var(--font-ui);
+--text-body:400 14px/1.5 var(--font-ui);
+--text-body-small:400 13px/1.45 var(--font-ui);
+--text-ui-label:500 12px/1.3 var(--font-ui);
+--text-caption:400 11.5px/1.35 var(--font-ui);
+--text-metadata:500 10.5px/1.3 var(--font-ui);
+--text-hand:400 17px/1.4 var(--font-hand);
+/* Date numerals — always Zilla Slab, tabular where supported */
+--text-numeral-lg:600 26px/1 var(--font-calendar);
+--text-numeral:500 15px/1 var(--font-calendar);
+--text-numeral-sm:500 12px/1 var(--font-calendar);
+--tracking-metadata:.06em;/* @kind other */
+--numeral-features:"tnum" 1,"lnum" 1;/* @kind other */
+}

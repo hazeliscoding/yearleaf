@@ -1,0 +1,9 @@
+{
+  "name": "@infinite-desk/canvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Spatial workspace math for Infinite Desk Calendar: deterministic date-to-world mapping, viewport transforms, and zoom tiers.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

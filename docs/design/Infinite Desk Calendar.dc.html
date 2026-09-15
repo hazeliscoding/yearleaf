@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/deskbound-design-system-60f15329-6c14-4cf1-858b-2fb483557695/styles.css">
+<script src="https://unpkg.com/lucide@0.454.0/dist/umd/lucide.min.js"></script>
+<script src="_ds/deskbound-design-system-60f15329-6c14-4cf1-858b-2fb483557695/_ds_bundle.js"></script>
+<style>
+html,body{height:100%;margin:0;overflow:hidden}
+body{font-family:var(--font-ui,'Hanken Grotesk',sans-serif);color:var(--ink-primary)}
+a{color:var(--accent,#9C5310)}a:hover{color:var(--ink-primary)}
+@keyframes tierIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+@keyframes flashPulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 3px var(--selection,#3B62A8)}}
+</style>
+</helmet>
+<div style="display:grid;grid-template-rows:44px 1fr;grid-template-columns:44px 1fr auto;height:100vh;background:var(--surface-canvas)" onClick="{{deselect}}">
+  <div style="grid-column:1/4;display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-toolbar);border-bottom:1px solid var(--border)" data-screen-label="Toolbar">
+    <span style="font:600 15px var(--font-calendar);margin-right:4px">Deskbound</span>
+    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Button" variant="subtle" onClick="{{goToday}}" hint-size="60px,28px">Today</x-import>
+    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.DateNavigator" label="{{navLabel}}" zoom-label="{{tierLabel}}" on-jump="{{openPal}}" hint-size="220px,28px"></x-import>
+    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.SegmentedControl" value="{{tierLabel}}" on-change="{{setTier}}" dc-props="{{segProps}}" hint-size="220px,28px"></x-import>
+    <span style="flex:1"></span>
+    <div onClick="{{openSearch}}" style="cursor:pointer">
+      <x-import component-from-global-scope="DeskboundDesignSystem_60f153.SearchField" placeholder="Search events, notes, dates…" dc-props="{{searchFieldProps}}" hint-size="230px,28px"></x-import>
+    </div>
+    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Button" variant="subtle" icon="command" onClick="{{openPal}}" hint-size="110px,28px">Commands</x-import>
+    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Button" icon-only="{{true}}" variant="ghost" icon="{{themeIcon}}" title="Toggle theme" onClick="{{toggleTheme}}" hint-size="28px,28px"></x-import>
+    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Button" variant="primary" icon="calendar-plus" hint-size="110px,28px">New event</x-import>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;background:var(--surface-toolbar);border-right:1px solid var(--border)" role="toolbar" aria-label="Tools" data-screen-label="Tool rail">
+    <sc-for list="{{tools}}" as="t" hint-placeholder-count="12">
+      <sc-if value="{{t.divider}}" hint-placeholder-val="{{false}}"><span style="width:60%;height:1px;background:var(--border);margin:4px 0"></span></sc-if>
+      <sc-if value="{{t.icon}}" hint-placeholder-val="{{true}}">
+        <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ToolButton" icon="{{t.icon}}" label="{{t.label}}" shortcut="{{t.shortcut}}" active="{{t.active}}" onClick="{{t.onClick}}" hint-size="32px,32px"></x-import>
+      </sc-if>
+    </sc-for>
+    <span style="flex:1"></span>
+    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ToolButton" icon="undo-2" label="Undo" shortcut="⌘Z" hint-size="32px,32px"></x-import>
+    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ToolButton" icon="redo-2" label="Redo" hint-size="32px,32px"></x-import>
+  </div>
+  <div ref="{{canvasRef}}" style="position:relative;overflow:hidden;background:var(--surface-canvas);cursor:{{canvasCursor}}" onPointerDown="{{canvasDown}}" onDoubleClick="{{canvasDbl}}" data-screen-label="Canvas">
+    <div style="position:absolute;left:0;top:0;width:1600px;height:1100px;transform:{{worldT}};transform-origin:0 0;transition:{{worldTransition}}">
+      <sc-if value="{{gridOn}}" hint-placeholder-val="{{true}}">
+        <div style="position:absolute;inset:-1000px;background-image:linear-gradient(var(--grid-line) 1px,transparent 1px),linear-gradient(90deg,var(--grid-line) 1px,transparent 1px);background-size:28px 28px;pointer-events:none"></div>
+      </sc-if>
+      <sc-if value="{{isMonth}}" hint-placeholder-val="{{true}}">
+        <div style="animation:tierIn .28s var(--ease-out)">
+          <div style="position:absolute;left:48px;top:24px;width:1010px;background:var(--surface-paper);border:1px solid var(--border);box-shadow:var(--shadow-1);padding:18px 22px 22px" data-screen-label="Month sheet">
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.MonthHeader" month="September" year="{{y2026}}" style="margin-bottom:10px" hint-size="100%,40px"></x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.WeekHeader" hint-size="100%,22px"></x-import>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr)">
+              <sc-for list="{{cells}}" as="c" hint-placeholder-count="35">
+                <x-import component-from-global-scope="DeskboundDesignSystem_60f153.CalendarCell" day="{{c.day}}" today="{{c.today}}" weekend="{{c.weekend}}" outside="{{c.outside}}" selected="{{c.selected}}" style="{{c.style}}" hint-size="138px,104px">
+                  <sc-for list="{{c.events}}" as="ev" hint-placeholder-count="0">
+                    <div onClick="{{ev.pick}}" style="cursor:pointer"><x-import component-from-global-scope="DeskboundDesignSystem_60f153.EventObject" dc-props="{{ev.p}}" hint-size="100%,20px"></x-import></div>
+                  </sc-for>
+                  <sc-for list="{{c.tasks}}" as="tk" hint-placeholder-count="0">
+                    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.TaskObject" dc-props="{{tk}}" hint-size="100%,20px"></x-import>
+                  </sc-for>
+                  <sc-if value="{{c.range}}" hint-placeholder-val="{{false}}">
+                    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.RangeBar" dc-props="{{c.range}}" hint-size="100%,18px"></x-import>
+                  </sc-if>
+                  <sc-if value="{{c.hand}}" hint-placeholder-val="{{false}}">
+                    <div style="font-family:var(--font-hand);font-size:15px;line-height:1.25;color:var(--ink-secondary);position:relative;z-index:2">{{c.hand}}</div>
+                  </sc-if>
+                  <sc-if value="{{c.img}}" hint-placeholder-val="{{false}}">
+                    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ImageObject" frame="taped" caption="{{c.img}}" width="{{imgW}}" height="{{imgH}}" hint-size="104px,70px"></x-import>
+                  </sc-if>
+                </x-import>
+              </sc-for>
+            </div>
+            <svg width="1010" height="620" viewBox="0 0 1010 620" style="position:absolute;left:22px;top:84px;pointer-events:none" aria-hidden="true">
+              <path d="M 640 96 C 700 130, 700 160, 648 196" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.85"></path>
+              <path d="M 654 188 L 646 197 L 658 199" fill="none" stroke="var(--accent)" stroke-width="1.6"></path>
+            </svg>
+            <div style="font:var(--text-caption);color:var(--ink-muted);margin-top:10px">Double-click anywhere to write. Press N for a sticky note. Drop an image onto the calendar.</div>
+          </div>
+          <sc-for list="{{floats}}" as="f" hint-placeholder-count="4">
+            <div style="position:absolute;left:{{f.x}}px;top:{{f.y}}px;transform:rotate({{f.rot}}deg);cursor:grab" onPointerDown="{{f.down}}" onClick="{{f.pick}}">
+              <sc-if value="{{f.isSticky}}" hint-placeholder-val="{{true}}">
+                <x-import component-from-global-scope="DeskboundDesignSystem_60f153.SelectionBox" selected="{{f.selected}}" rotatable="{{true}}" hint-size="180px,120px">
+                  <x-import component-from-global-scope="DeskboundDesignSystem_60f153.StickyNote" dc-props="{{f.p}}" hint-size="170px,110px">{{f.text}}</x-import>
+                </x-import>
+              </sc-if>
+              <sc-if value="{{f.isImage}}" hint-placeholder-val="{{false}}">
+                <x-import component-from-global-scope="DeskboundDesignSystem_60f153.SelectionBox" selected="{{f.selected}}" hint-size="180px,140px">
+                  <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ImageObject" dc-props="{{f.p}}" hint-size="170px,130px"></x-import>
+                </x-import>
+              </sc-if>
+              <sc-if value="{{f.isFile}}" hint-placeholder-val="{{false}}">
+                <x-import component-from-global-scope="DeskboundDesignSystem_60f153.SelectionBox" selected="{{f.selected}}" hint-size="200px,52px">
+                  <x-import component-from-global-scope="DeskboundDesignSystem_60f153.FileAttachment" dc-props="{{f.p}}" hint-size="190px,44px"></x-import>
+                </x-import>
+              </sc-if>
+              <sc-if value="{{f.isText}}" hint-placeholder-val="{{false}}">
+                <x-import component-from-global-scope="DeskboundDesignSystem_60f153.TextObject" state="{{f.textState}}" hand="{{true}}" style="font-size:20px" hint-size="260px,30px">{{f.text}}</x-import>
+              </sc-if>
+              <sc-if value="{{f.isNewText}}" hint-placeholder-val="{{false}}">
+                <div contentEditable="{{true}}" suppressContentEditableWarning="{{true}}" style="font-family:var(--font-hand);font-size:20px;color:var(--ink-primary);min-width:120px;outline:1px dashed var(--selection);padding:2px 6px">{{f.text}}</div>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{isWeek}}" hint-placeholder-val="{{false}}">
+        <div style="animation:tierIn .28s var(--ease-out)">
+          <div style="position:absolute;left:48px;top:24px;width:1080px;background:var(--surface-paper);border:1px solid var(--border);box-shadow:var(--shadow-1);padding:18px 22px 22px" data-screen-label="Week sheet">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:12px">
+              <span style="font:600 26px var(--font-calendar)">September 14–20</span>
+              <span style="font:var(--text-caption);color:var(--ink-muted);text-transform:uppercase;letter-spacing:var(--tracking-metadata)">Week 38 · 2026</span>
+            </div>
+            <div style="position:relative;margin-left:46px;margin-bottom:8px;display:grid;grid-template-columns:repeat(7,1fr)">
+              <sc-for list="{{weekDays}}" as="wd" hint-placeholder-count="7">
+                <div style="padding:4px 8px;border-left:1px solid var(--border-divider)">
+                  <span style="font:600 20px var(--font-calendar);color:{{wd.c}}">{{wd.d}}</span>
+                  <span style="font:var(--text-caption);color:var(--ink-muted);margin-left:5px">{{wd.l}}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="position:relative;margin-left:46px;height:36px">
+              <div style="position:absolute;left:{{kyotoL}}px;top:4px;width:{{kyotoW}}px">
+                <x-import component-from-global-scope="DeskboundDesignSystem_60f153.RangeBar" kind="travel" label="Kyoto trip" hint-size="100%,18px"></x-import>
+              </div>
+            </div>
+            <div style="position:relative;height:530px">
+              <sc-for list="{{weekHours}}" as="h" hint-placeholder-count="12">
+                <div style="position:absolute;left:0;right:0;top:{{h.top}}px;border-top:1px solid var(--border-divider)">
+                  <span style="position:absolute;left:0;top:-7px;width:40px;font:var(--text-numeral-sm,11px var(--font-calendar));color:var(--ink-muted)">{{h.label}}</span>
+                </div>
+              </sc-for>
+              <sc-for list="{{weekCols}}" as="wc" hint-placeholder-count="7">
+                <div style="position:absolute;top:0;bottom:0;left:{{wc.x}}px;border-left:1px solid var(--border-divider)"></div>
+              </sc-for>
+              <div style="position:absolute;left:46px;top:0;right:0;bottom:0;background:linear-gradient(transparent 0,transparent 100%)"></div>
+              <sc-for list="{{weekBlocks}}" as="b" hint-placeholder-count="5">
+                <div style="position:absolute;left:{{b.x}}px;top:{{b.top}}px;width:{{b.w}}px">
+                  <x-import component-from-global-scope="DeskboundDesignSystem_60f153.EventObject" dc-props="{{b.p}}" hint-size="100%,40px"></x-import>
+                </div>
+              </sc-for>
+              <div style="position:absolute;left:{{wedX}}px;top:60px;transform:rotate(-2deg)">
+                <x-import component-from-global-scope="DeskboundDesignSystem_60f153.StickyNote" color="mint" variant="compact" hand="{{true}}" hint-size="130px,80px">pick up prints @ lab</x-import>
+              </div>
+              <div style="position:absolute;left:{{thuX}}px;top:300px;font-family:var(--font-hand);font-size:17px;color:var(--ink-secondary);transform:rotate(-1deg)">pack light — one bag!</div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{isDay}}" hint-placeholder-val="{{false}}">
+        <div style="animation:tierIn .28s var(--ease-out)">
+          <div style="position:absolute;left:180px;top:24px;width:880px;background:var(--surface-paper);border:1px solid var(--border);box-shadow:var(--shadow-1);padding:26px 30px 30px" data-screen-label="Day page">
+            <div style="display:flex;align-items:baseline;gap:12px;border-bottom:2px solid var(--ink-primary);padding-bottom:10px;margin-bottom:16px">
+              <span style="font:600 30px var(--font-calendar)">Tuesday, September 15</span>
+              <span style="font:var(--text-caption);color:var(--accent);text-transform:uppercase;letter-spacing:var(--tracking-metadata)">Today</span>
+              <span style="flex:1"></span>
+              <span style="font:var(--text-caption);color:var(--ink-muted)">Week 38 · Day 258</span>
+            </div>
+            <div style="display:grid;grid-template-columns:300px 1fr;gap:28px">
+              <div style="position:relative;height:560px">
+                <sc-for list="{{dayHours}}" as="h" hint-placeholder-count="12">
+                  <div style="position:absolute;left:0;right:0;top:{{h.top}}px;border-top:1px solid var(--border-divider)">
+                    <span style="position:absolute;left:0;top:-7px;font:11px var(--font-calendar);color:var(--ink-muted)">{{h.label}}</span>
+                  </div>
+                </sc-for>
+                <div style="position:absolute;left:44px;top:{{dentistTop}}px;width:230px">
+                  <x-import component-from-global-scope="DeskboundDesignSystem_60f153.EventObject" time="14:00" title="Dentist" color="teal" variant="tentative" reminder="{{true}}" expanded="{{true}}" meta="Dr. Okada · 20 min walk" hint-size="100%,48px"></x-import>
+                </div>
+                <div style="position:absolute;left:44px;top:{{reviewTop}}px;width:230px">
+                  <x-import component-from-global-scope="DeskboundDesignSystem_60f153.EventObject" time="17:30" title="Call Mom" color="coral" hint-size="100%,22px"></x-import>
+                </div>
+                <div style="position:absolute;left:0;right:10px;top:{{nowTop}}px;border-top:1.5px solid var(--accent)">
+                  <span style="position:absolute;right:0;top:-16px;font:var(--text-caption);color:var(--accent)">now</span>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:16px">
+                <div>
+                  <div style="font:600 15px var(--font-calendar);margin-bottom:6px">Tasks</div>
+                  <sc-for list="{{dayTasks}}" as="tk" hint-placeholder-count="3">
+                    <x-import component-from-global-scope="DeskboundDesignSystem_60f153.TaskObject" dc-props="{{tk}}" hint-size="100%,22px"></x-import>
+                  </sc-for>
+                </div>
+                <div>
+                  <div style="font:600 15px var(--font-calendar);margin-bottom:6px">Notes</div>
+                  <div style="background-image:repeating-linear-gradient(transparent,transparent 27px,var(--rule-line) 27px,var(--rule-line) 28px);min-height:150px;font-family:var(--font-hand);font-size:19px;line-height:28px;color:var(--ink-primary);padding-top:2px">zine spreads are almost done — ask R. about the risograph slot before Friday.<br>kyoto packing: camera, film ×6, sketchbook</div>
+                </div>
+                <div style="display:flex;gap:12px;align-items:flex-start">
+                  <x-import component-from-global-scope="DeskboundDesignSystem_60f153.FileAttachment" kind="pdf" name="zine-spreads-v3.pdf" meta="4.8 MB" hint-size="200px,44px"></x-import>
+                  <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ImageObject" frame="taped" caption="spread 12–13" width="{{dayImgW}}" height="{{dayImgH}}" hint-size="150px,110px"></x-import>
+                </div>
+                <div>
+                  <div style="font:var(--text-caption);color:var(--ink-muted);text-transform:uppercase;letter-spacing:var(--tracking-metadata);margin-bottom:5px">Related</div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <span style="font:var(--text-caption);border:1px solid var(--border);padding:3px 8px;border-radius:3px;background:var(--surface-raised)">Zine deadline · Sep 11</span>
+                    <span style="font:var(--text-caption);border:1px solid var(--border);padding:3px 8px;border-radius:3px;background:var(--surface-raised)">Print run · Sep 21–22</span>
+                    <span style="font:var(--text-caption);border:1px solid var(--border);padding:3px 8px;border-radius:3px;background:var(--surface-raised)">Kyoto · Sep 17–19</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{isYear}}" hint-placeholder-val="{{false}}">
+        <div style="animation:tierIn .28s var(--ease-out)">
+          <div style="position:absolute;left:48px;top:24px;width:1080px;background:var(--surface-paper);border:1px solid var(--border);box-shadow:var(--shadow-1);padding:22px 26px 26px" data-screen-label="Year planner">
+            <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px">
+              <span style="font:600 34px var(--font-calendar)">2026</span>
+              <span style="font:var(--text-caption);color:var(--ink-muted);text-transform:uppercase;letter-spacing:var(--tracking-metadata)">Year planner</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px 24px">
+              <sc-for list="{{yearMonths}}" as="m" hint-placeholder-count="12">
+                <div onClick="{{m.go}}" style="cursor:pointer;padding:8px;border-radius:var(--radius-subtle)" style-hover="background:var(--hover)">
+                  <div style="font:600 14px var(--font-calendar);margin-bottom:5px;color:{{m.c}}">{{m.name}}</div>
+                  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px">
+                    <sc-for list="{{m.cells}}" as="mc" hint-placeholder-count="35">
+                      <span style="height:16px;display:flex;align-items:center;justify-content:center;font:10px var(--font-calendar);font-variant-numeric:tabular-nums;border-radius:2px;background:{{mc.bg}};color:{{mc.c}}">{{mc.d}}</span>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="position:absolute;right:34px;top:290px;transform:rotate(-2deg);font-family:var(--font-hand);font-size:20px;color:var(--accent)">Kyoto! ↴</div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{isMonth}}" hint-placeholder-val="{{true}}"><span></span></sc-if>
+    </div>
+    <div style="position:absolute;left:20px;bottom:16px">
+      <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ZoomControl" zoom="{{zoomPct}}" on-zoom-in="{{zoomIn}}" on-zoom-out="{{zoomOut}}" on-fit-month="{{fitMonth}}" on-fit-year="{{fitYear}}" hint-size="150px,28px"></x-import>
+    </div>
+    <sc-if value="{{layersOn}}" hint-placeholder-val="{{true}}">
+      <div style="position:absolute;right:16px;bottom:16px">
+        <x-import component-from-global-scope="DeskboundDesignSystem_60f153.LayerPanel" dc-props="{{layerProps}}" hint-size="190px,170px"></x-import>
+      </div>
+    </sc-if>
+    <sc-if value="{{pal}}" hint-placeholder-val="{{false}}">
+      <div style="position:absolute;inset:0;background:rgba(43,40,34,.18);display:flex;justify-content:center;padding-top:64px;z-index:700" onClick="{{closePal}}" data-screen-label="Command palette">
+        <div onClick="{{stop}}" style="align-self:flex-start">
+          <x-import component-from-global-scope="DeskboundDesignSystem_60f153.CommandPalette" query="{{palQ}}" on-query-change="{{setPalQ}}" groups="{{palGroups}}" placeholder="Type a command or date…" hint-size="560px,380px"></x-import>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{searchOpen}}" hint-placeholder-val="{{false}}">
+      <div style="position:absolute;inset:0;background:rgba(43,40,34,.18);display:flex;justify-content:center;padding-top:64px;z-index:700" onClick="{{closeSearch}}" data-screen-label="Search overlay">
+        <div onClick="{{stop}}" style="align-self:flex-start;width:520px;background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-soft);box-shadow:var(--shadow-4);overflow:hidden">
+          <input ref="{{searchInputRef}}" value="{{searchQ}}" onChange="{{setSearchQ}}" placeholder="Search everything on this desk…" aria-label="Search" style="width:100%;box-sizing:border-box;border:none;outline:none;background:transparent;padding:14px 16px;font:15px var(--font-ui);color:var(--ink-primary);border-bottom:1px solid var(--border)">
+          <div style="max-height:340px;overflow:auto;padding:6px">
+            <sc-for list="{{searchResults}}" as="r" hint-placeholder-count="4">
+              <div onClick="{{r.go}}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius-subtle);cursor:pointer" style-hover="background:var(--hover)">
+                <span style="width:8px;height:8px;border-radius:50%;background:{{r.dot}};flex:none"></span>
+                <span style="flex:1;font:14px var(--font-ui);color:var(--ink-primary)">{{r.label}}</span>
+                <span style="font:var(--text-caption);color:var(--ink-muted);font-variant-numeric:tabular-nums">{{r.meta}}</span>
+              </div>
+            </sc-for>
+            <sc-if value="{{noResults}}" hint-placeholder-val="{{false}}">
+              <div style="padding:18px 10px;font:13px var(--font-ui);color:var(--ink-muted)">Nothing on the desk matches that — yet.</div>
+            </sc-if>
+          </div>
+          <div style="padding:8px 16px;border-top:1px solid var(--border);font:var(--text-caption);color:var(--ink-muted)">Searches events, notes, handwriting (OCR), files and dates · Enter jumps to result</div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+  <sc-if value="{{inspOpen}}" hint-placeholder-val="{{false}}">
+    <div onClick="{{stop}}" data-screen-label="Inspector">
+      <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorPanel" title="{{inspTitle}}" hint-size="264px,100%" style="height:100%">
+        <sc-if value="{{inspSticky}}" hint-placeholder-val="{{true}}">
+          <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorGroup" label="Paper" hint-size="100%,90px">
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Color" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ColorPicker" compact="{{true}}" value="{{noteColor}}" on-change="{{setNoteColor}}" hint-size="140px,24px"></x-import>
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Opacity" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Slider" default-value="{{op100}}" unit="%" style="flex:1" hint-size="130px,24px"></x-import>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorGroup" label="Geometry" hint-size="100%,66px">
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Position" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.NumberField" default-value="{{selX}}" unit="x" style="width:74px" hint-size="74px,24px"></x-import>
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.NumberField" default-value="{{selY}}" unit="y" style="width:74px" hint-size="74px,24px"></x-import>
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Rotation" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.NumberField" default-value="{{selRot}}" unit="°" style="width:74px" hint-size="74px,24px"></x-import>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorGroup" label="Behavior" hint-size="100%,66px">
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Pinned" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Toggle" default-checked="{{true}}" hint-size="34px,20px"></x-import>
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Locked" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Toggle" hint-size="34px,20px"></x-import>
+            </x-import>
+          </x-import>
+        </sc-if>
+        <sc-if value="{{inspEvent}}" hint-placeholder-val="{{false}}">
+          <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorGroup" label="Event" hint-size="100%,120px">
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Title" hint-size="100%,30px">
+              <input value="{{evTitle}}" onChange="{{setEvTitle}}" aria-label="Event title" style="flex:1;min-width:0;height:26px;border:1px solid var(--border);border-radius:var(--radius-subtle);background:var(--surface-raised);padding:0 8px;font:13px var(--font-ui);color:var(--ink-primary)">
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Time" hint-size="100%,30px">
+              <span style="font:13px var(--font-ui);color:var(--ink-primary);font-variant-numeric:tabular-nums">{{evTime}}</span>
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Color" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.ColorPicker" compact="{{true}}" value="{{evColor}}" hint-size="140px,24px"></x-import>
+            </x-import>
+          </x-import>
+          <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorGroup" label="Schedule" hint-size="100%,90px">
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Repeats" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Toggle" default-checked="{{evRecurring}}" hint-size="34px,20px"></x-import>
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Reminder" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Toggle" default-checked="{{evReminder}}" hint-size="34px,20px"></x-import>
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Calendar" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.SegmentedControl" default-value="Work" dc-props="{{calSegProps}}" hint-size="130px,26px"></x-import>
+            </x-import>
+          </x-import>
+        </sc-if>
+        <sc-if value="{{inspImage}}" hint-placeholder-val="{{false}}">
+          <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorGroup" label="Image" hint-size="100%,90px">
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Frame" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.SegmentedControl" default-value="Taped" dc-props="{{frameSegProps}}" hint-size="150px,26px"></x-import>
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Caption" hint-size="100%,30px">
+              <input value="{{imgCaption}}" onChange="{{setImgCaption}}" aria-label="Caption" style="flex:1;min-width:0;height:26px;border:1px solid var(--border);border-radius:var(--radius-subtle);background:var(--surface-raised);padding:0 8px;font:13px var(--font-ui);color:var(--ink-primary)">
+            </x-import>
+          </x-import>
+        </sc-if>
+        <sc-if value="{{inspGeneric}}" hint-placeholder-val="{{false}}">
+          <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorGroup" label="Object" hint-size="100%,66px">
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Locked" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Toggle" hint-size="34px,20px"></x-import>
+            </x-import>
+            <x-import component-from-global-scope="DeskboundDesignSystem_60f153.InspectorRow" label="Pinned" hint-size="100%,30px">
+              <x-import component-from-global-scope="DeskboundDesignSystem_60f153.Toggle" default-checked="{{true}}" hint-size="34px,20px"></x-import>
+            </x-import>
+          </x-import>
+        </sc-if>
+      </x-import>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;canvasGrid&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Canvas&quot;},&quot;showLayerPanel&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Canvas&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.canvasRef = React.createRef();
+    this.searchInputRef = React.createRef();
+    this.dragInfo = null;
+    this.state = {
+      tier:'Month', tool:'Select', dark:null, pal:false, palQ:'', searchOpen:false, searchQ:'',
+      sel:null, noteColor:'--stationery-yellow', flash:null, pan:{x:0,y:0}, zoom:0.92, spaceHeld:false, panning:false,
+      evTitle:'Dentist', evTime:'14:00 – 14:40', evColor:'--stationery-teal', imgCaption:'moodboard', animT:true,
+      floats:[
+        {id:'s1',kind:'sticky',x:1120,y:56,rot:0,text:'call the framer about the print — thu?',p:{color:'yellow',hand:true,pinned:true}},
+        {id:'s2',kind:'sticky',x:1150,y:250,rot:-1.5,text:'',p:{color:'mint',items:[{label:'Water plants',done:true},{label:'Book flights'},{label:'Renew passport'}]}},
+        {id:'s3',kind:'sticky',x:1118,y:432,rot:1,text:'order flowers before the 18th',p:{color:'coral',hand:true,variant:'compact'}},
+        {id:'img1',kind:'image',x:1130,y:560,rot:0,p:{frame:'taped',caption:'moodboard'}},
+        {id:'f1',kind:'file',x:1140,y:760,rot:0,p:{kind:'pdf',name:'Fair-floorplan.pdf',meta:'1.2 MB'}},
+        {id:'t1',kind:'text',x:120,y:840,rot:0,text:'don’t forget: fair setup starts the 24th'}
+      ]
+    };
+  }
+  componentDidMount(){
+    this.applyTheme();
+    this.kd = (e)=>{
+      const tag=(e.target.tagName||'').toLowerCase();
+      const typing = tag==='input'||tag==='textarea'||e.target.isContentEditable;
+      if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();this.setState(s=>({pal:!s.pal,searchOpen:false}));return;}
+      if(e.key==='Escape'){this.setState({pal:false,searchOpen:false,sel:null});return;}
+      if(typing) return;
+      if(e.key===' '){this.setState({spaceHeld:true});e.preventDefault();return;}
+      const k=e.key.toLowerCase();
+      if(k==='n'){this.addSticky();return;}
+      if(k==='v')this.setState({tool:'Select'});
+      if(k==='h')this.setState({tool:'Pan'});
+      if(k==='t')this.setState({tool:'Text'});
+      if(k==='p')this.setState({tool:'Pen'});
+    };
+    this.ku = (e)=>{ if(e.key===' ')this.setState({spaceHeld:false}); };
+    this.pm = (e)=>{
+      if(this.dragInfo){
+        const {id,dx,dy}=this.dragInfo, z=this.state.zoom, p=this.state.pan;
+        const x=Math.round((e.clientX-p.x)/z-dx), y=Math.round((e.clientY-p.y)/z-dy);
+        this.setState(s=>({floats:s.floats.map(f=>f.id===id?{...f,x,y}:f)}));
+      } else if(this.panInfo){
+        this.setState({pan:{x:this.panInfo.px+(e.clientX-this.panInfo.cx),y:this.panInfo.py+(e.clientY-this.panInfo.cy)},animT:false});
+      }
+    };
+    this.pu = ()=>{ this.dragInfo=null; this.panInfo=null; if(this.state.panning)this.setState({panning:false}); };
+    window.addEventListener('keydown',this.kd);
+    window.addEventListener('keyup',this.ku);
+    window.addEventListener('pointermove',this.pm);
+    window.addEventListener('pointerup',this.pu);
+    this.wh = (e)=>{
+      e.preventDefault();
+      if(e.ctrlKey||e.metaKey){
+        const nz=Math.min(1.8,Math.max(0.35,this.state.zoom*(1-e.deltaY*0.01)));
+        this.setState({zoom:nz,animT:false});
+      } else {
+        this.setState(s=>({pan:{x:s.pan.x-e.deltaX,y:s.pan.y-e.deltaY},animT:false}));
+      }
+    };
+    if(this.canvasRef.current) this.canvasRef.current.addEventListener('wheel',this.wh,{passive:false});
+  }
+  componentWillUnmount(){
+    window.removeEventListener('keydown',this.kd);
+    window.removeEventListener('keyup',this.ku);
+    window.removeEventListener('pointermove',this.pm);
+    window.removeEventListener('pointerup',this.pu);
+    if(this.canvasRef.current) this.canvasRef.current.removeEventListener('wheel',this.wh);
+  }
+  componentDidUpdate(pp,ps){
+    if(ps.dark!==this.state.dark||pp.theme!==this.props.theme) this.applyTheme();
+    if(!ps.searchOpen&&this.state.searchOpen&&this.searchInputRef.current) this.searchInputRef.current.focus();
+  }
+  isDark(){ return this.state.dark!==null?this.state.dark:(this.props.theme==='dark'); }
+  applyTheme(){ document.documentElement.dataset.theme=this.isDark()?'dark':''; }
+  addSticky(){
+    const id='new'+Date.now();
+    this.setState(s=>({floats:[...s.floats,{id,kind:'sticky',x:520+(s.floats.length%3)*40,y:660,rot:-1+Math.random()*2,text:'new note',p:{color:s.noteColor.replace('--stationery-','')||'yellow',hand:true}}],sel:{kind:'sticky',id}}));
+  }
+  flashDay(d){
+    this.setState({flash:d,tier:'Month',searchOpen:false,pal:false,pan:{x:0,y:0},zoom:0.92,animT:true});
+    clearTimeout(this.ft); this.ft=setTimeout(()=>this.setState({flash:null}),1800);
+  }
+  searchIndex(){
+    return [
+      {label:'Dentist — Dr. Okada',meta:'Tue Sep 15 · 14:00',dot:'var(--stationery-teal)',day:15,kw:'dentist okada appointment'},
+      {label:'Zine deadline',meta:'Fri Sep 11 · all day',dot:'var(--stationery-red)',day:11,kw:'zine deadline print'},
+      {label:'Kyoto trip',meta:'Sep 17–19',dot:'var(--stationery-teal)',day:17,kw:'kyoto trip travel japan'},
+      {label:'Print fair opening',meta:'Fri Sep 25 · 19:30',dot:'var(--stationery-rose)',day:25,kw:'print fair opening'},
+      {label:'“call the framer about the print — thu?”',meta:'Sticky note · OCR',dot:'var(--stationery-yellow)',day:24,kw:'framer print sticky call'},
+      {label:'“don’t schedule anything here”',meta:'Handwriting · Sep 23',dot:'var(--stationery-olive)',day:23,kw:'schedule handwriting note dont'},
+      {label:'Fair-floorplan.pdf',meta:'Attachment · 1.2 MB',dot:'var(--stationery-indigo)',day:25,kw:'fair floorplan pdf file'},
+      {label:'Anniversary',meta:'Fri Sep 18',dot:'var(--stationery-coral)',day:18,kw:'anniversary flowers'},
+      {label:'Concert — Nils Frahm',meta:'Thu Sep 10 · 20:00',dot:'var(--stationery-rose)',day:10,kw:'concert music nils frahm'},
+      {label:'Deploy website',meta:'Mon Sep 28 · 09:00',dot:'var(--stationery-teal)',day:28,kw:'deploy website launch'}
+    ];
+  }
+  monthContent(){
+    const E=(p)=>p;
+    return {
+      1:{tasks:[{label:'Pay electric bill',due:'1st'}]},
+      2:{events:[E({time:'10:00',title:'Studio day',color:'violet'})]},
+      3:{hand:'call Mom'},
+      4:{tasks:[{label:'Send invoice',due:'4th',priority:'high'}],hand:'start zine spreads'},
+      5:{img:'trail run'},
+      8:{events:[E({time:'09:30',title:'Client review',color:'blue',recurring:true}),E({time:'18:00',title:'Ceramics class',color:'olive'})]},
+      10:{events:[E({time:'20:00',title:'Nils Frahm',color:'rose'})]},
+      11:{events:[E({title:'Zine deadline',color:'red',variant:'allday'})]},
+      12:{img:'ref shot'},
+      14:{events:[E({time:'09:30',title:'Client review',color:'blue',recurring:true})]},
+      15:{events:[E({time:'14:00',title:'Dentist',color:'teal',variant:'tentative',reminder:true})],tasks:[{label:'Order paper stock'}]},
+      17:{range:{kind:'travel',label:'Kyoto →',style:{marginRight:-7,borderRadius:'2px 0 0 2px'}}},
+      18:{range:{kind:'travel',label:'',style:{margin:'0 -7px',borderRadius:0}},events:[E({title:'Anniversary',color:'coral',variant:'allday'})]},
+      19:{range:{kind:'travel',label:'',style:{marginLeft:-7,borderRadius:'0 2px 2px 0'}}},
+      20:{events:[E({time:'19:00',title:'Game night',color:'indigo'})]},
+      21:{range:{kind:'deadline',label:'Print run',style:{marginRight:-7,borderRadius:'2px 0 0 2px'}}},
+      22:{range:{kind:'deadline',label:'',style:{marginLeft:-7,borderRadius:'0 9px 9px 0'}},events:[E({time:'09:30',title:'Client review',color:'blue',recurring:true})]},
+      23:{hand:'don’t schedule anything here'},
+      25:{events:[E({time:'19:30',title:'Print fair opening',color:'rose'})]},
+      26:{events:[E({title:'Hike — Mt. Tam',color:'green',variant:'allday'})]},
+      28:{events:[E({time:'09:00',title:'Deploy website',color:'teal'})]},
+      29:{events:[E({time:'08:00',title:'Morning pages',color:'olive',variant:'completed'})]},
+      30:{tasks:[{label:'Finish book',due:'30th'}]}
+    };
+  }
+  buildCells(){
+    const WEEKS=[[31,1,2,3,4,5,6],[7,8,9,10,11,12,13],[14,15,16,17,18,19,20],[21,22,23,24,25,26,27],[28,29,30,1,2,3,4]];
+    const content=this.monthContent(), out=[];
+    WEEKS.forEach((w,wi)=>w.forEach((d,di)=>{
+      const outside=(wi===0&&d>7)||(wi===4&&d<7);
+      const c=(!outside&&content[d])||{};
+      out.push({
+        day:d,today:!outside&&d===15,weekend:di>4,outside,
+        selected:!outside&&this.state.flash===d,
+        style:{minHeight:104,...(!outside&&this.state.flash===d?{animation:'flashPulse 1s ease 2'}:{})},
+        events:(c.events||[]).map(p=>({p,pick:(e)=>{e.stopPropagation();this.setState({sel:{kind:'event',id:d+p.title},evTitle:p.title,evTime:p.time?p.time:'All day',evColor:'--stationery-'+(p.color||'blue')});}})),
+        tasks:c.tasks||[], range:c.range||null, hand:c.hand||null, img:c.img||null
+      });
+    }));
+    return out;
+  }
+  buildYear(){
+    const names=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return names.map((name,m)=>{
+      const first=(new Date(2026,m,1).getDay()+6)%7, days=new Date(2026,m+1,0).getDate(), cells=[];
+      for(let i=0;i<first;i++)cells.push({d:'',bg:'transparent',c:'transparent'});
+      for(let d=1;d<=days;d++){
+        let bg='transparent',c='var(--ink-secondary)';
+        if(m===8&&d===15){bg='var(--accent)';c:'#fff';c='var(--ink-inverse,#fff)';}
+        else if(m===8&&d>=17&&d<=19){bg='var(--stationery-teal-soft)';c='var(--stationery-teal-ink)';}
+        else if(m===8&&d===11){bg='var(--stationery-red-soft)';c='var(--stationery-red-ink)';}
+        else if(m===8&&d===25){bg='var(--stationery-rose-soft)';c='var(--stationery-rose-ink)';}
+        else if(m===11&&d>=24){bg='var(--stationery-yellow-soft)';c='var(--stationery-yellow-ink)';}
+        cells.push({d,bg,c});
+      }
+      return {name,cells,c:m===8?'var(--accent)':'var(--ink-primary)',go:(e)=>{e.stopPropagation();this.setState({tier:'Month',animT:true});}};
+    });
+  }
+  renderVals(){
+    const s=this.state, z=s.zoom;
+    const hy=(t)=>(t-8)*44, colW=131, gut=46;
+    const tierLabels={Day:'Tuesday, September 15',Week:'Sep 14 – 20, 2026',Month:'September 2026',Year:'2026'};
+    const results=this.searchIndex().filter(r=>!s.searchQ||( r.label+' '+r.kw).toLowerCase().includes(s.searchQ.toLowerCase())).slice(0,7)
+      .map(r=>({...r,go:(e)=>{e.stopPropagation();this.flashDay(r.day);}}));
+    const selFloat=s.sel&&s.floats.find(f=>f.id===s.sel.id);
+    const inspKind=s.sel?s.sel.kind:null;
+    return {
+      canvasRef:this.canvasRef, searchInputRef:this.searchInputRef, y2026:2026,
+      tools:[
+        {icon:'mouse-pointer-2',label:'Select',shortcut:'V'},{icon:'hand',label:'Pan',shortcut:'H'},{icon:'type',label:'Text',shortcut:'T'},
+        {icon:'sticky-note',label:'Sticky note',shortcut:'N'},{icon:'calendar-plus',label:'Event',shortcut:'E'},{icon:'square-check',label:'Task',shortcut:'K'},
+        {divider:true},{icon:'pen-line',label:'Pen',shortcut:'P'},{icon:'pencil',label:'Pencil'},{icon:'highlighter',label:'Highlighter'},{icon:'eraser',label:'Eraser'},{icon:'lasso',label:'Lasso'},
+        {divider:true},{icon:'image',label:'Image'},{icon:'move-up-right',label:'Arrow'},{icon:'stamp',label:'Stamp'}
+      ].map(t=>t.divider?t:{...t,active:s.tool===t.label,onClick:()=>this.setState({tool:t.label})}),
+      navLabel:tierLabels[s.tier], tierLabel:s.tier,
+      segProps:{options:['Day','Week','Month','Year']},
+      setTier:(v)=>this.setState({tier:v,animT:true,pan:{x:0,y:0},zoom:0.92}),
+      searchFieldProps:{style:{width:230,pointerEvents:'none'}},
+      openSearch:(e)=>{e.stopPropagation();this.setState({searchOpen:true,pal:false});},
+      closeSearch:(e)=>{e.stopPropagation();this.setState({searchOpen:false});},
+      searchOpen:s.searchOpen, searchQ:s.searchQ,
+      setSearchQ:(e)=>this.setState({searchQ:e.target.value}),
+      searchResults:results, noResults:results.length===0,
+      openPal:(e)=>{if(e&&e.stopPropagation)e.stopPropagation();this.setState({pal:true,searchOpen:false});},
+      closePal:(e)=>{e.stopPropagation();this.setState({pal:false});},
+      pal:s.pal, palQ:s.palQ, setPalQ:(q)=>this.setState({palQ:q}),
+      palGroups:[
+        {label:'Go to',items:[{icon:'calendar',label:'Next Friday',meta:'Sep 18, 2026',selected:true},{icon:'calendar',label:'Today',meta:'Sep 15, 2026',shortcut:['⇧','T']},{icon:'calendar',label:'October 2026'}]},
+        {label:'Commands',items:[{icon:'sticky-note',label:'New sticky note',shortcut:['N']},{icon:'calendar-plus',label:'New event',shortcut:['E']},{icon:'zoom-in',label:'Fit month',shortcut:['⇧','1']},{icon:'layers-2',label:'Toggle layer: Photos'}]},
+        {label:'Recent',items:[{icon:'history',label:'Jump to Kyoto trip',meta:'Sep 17–19'}]}
+      ],
+      stop:(e)=>e.stopPropagation(),
+      themeIcon:this.isDark()?'sun':'moon',
+      toggleTheme:(e)=>{e.stopPropagation();this.setState({dark:!this.isDark()});},
+      goToday:(e)=>{e.stopPropagation();this.flashDay(15);},
+      deselect:()=>this.setState({sel:null}),
+      canvasDown:(e)=>{
+        if(e.target===e.currentTarget||s.spaceHeld||s.tool==='Pan'){
+          this.panInfo={cx:e.clientX,cy:e.clientY,px:s.pan.x,py:s.pan.y};
+          this.setState({panning:true,sel:null});
+        }
+      },
+      canvasDbl:(e)=>{
+        if(e.target!==e.currentTarget)return;
+        const r=e.currentTarget.getBoundingClientRect();
+        const x=(e.clientX-r.left-s.pan.x)/z, y=(e.clientY-r.top-s.pan.y)/z;
+        const id='txt'+Date.now();
+        this.setState(st=>({floats:[...st.floats,{id,kind:'newtext',x,y,rot:0,text:'start typing…'}]}));
+      },
+      canvasCursor:s.panning?'grabbing':(s.spaceHeld||s.tool==='Pan'?'grab':'default'),
+      worldT:'translate('+s.pan.x+'px,'+s.pan.y+'px) scale('+z+')',
+      worldTransition:s.animT?'transform .3s var(--ease-out)':'none',
+      gridOn:this.props.canvasGrid??true,
+      isMonth:s.tier==='Month', isWeek:s.tier==='Week', isDay:s.tier==='Day', isYear:s.tier==='Year',
+      cells:this.buildCells(), imgW:100, imgH:62,
+      floats:s.floats.map(f=>({
+        ...f,
+        isSticky:f.kind==='sticky', isImage:f.kind==='image', isFile:f.kind==='file', isText:f.kind==='text', isNewText:f.kind==='newtext',
+        selected:!!(s.sel&&s.sel.id===f.id),
+        textState:(s.sel&&s.sel.id===f.id)?'selected':'idle',
+        p:f.id==='s1'?{...f.p,color:s.noteColor.replace('--stationery-','')}:(f.id==='img1'?{...f.p,caption:s.imgCaption}:f.p),
+        down:(e)=>{
+          e.stopPropagation();
+          const wx=(e.clientX-s.pan.x)/z, wy=(e.clientY-s.pan.y)/z;
+          this.dragInfo={id:f.id,dx:wx-f.x,dy:wy-f.y};
+        },
+        pick:(e)=>{e.stopPropagation();this.setState({sel:{kind:f.kind==='newtext'?'text':f.kind,id:f.id}});}
+      })),
+      weekDays:[{d:14,l:'Mon'},{d:15,l:'Tue'},{d:16,l:'Wed'},{d:17,l:'Thu'},{d:18,l:'Fri'},{d:19,l:'Sat'},{d:20,l:'Sun'}].map((w,i)=>({...w,c:w.d===15?'var(--accent)':'var(--ink-primary)'})),
+      weekHours:Array.from({length:12},(_,i)=>({top:hy(8+i),label:(8+i)+':00'})),
+      weekCols:Array.from({length:7},(_,i)=>({x:gut+i*colW})),
+      weekBlocks:[
+        {col:0,t:9.5,p:{time:'09:30',title:'Client review',color:'blue',recurring:true,expanded:true,meta:'45 min · video'}},
+        {col:1,t:14,p:{time:'14:00',title:'Dentist',color:'teal',variant:'tentative',reminder:true,expanded:true,meta:'Dr. Okada'}},
+        {col:2,t:18,p:{time:'18:00',title:'Ceramics class',color:'olive',expanded:true,meta:'Studio B'}},
+        {col:4,t:19,p:{time:'19:00',title:'Anniversary dinner',color:'coral',expanded:true,meta:'table for two'}},
+        {col:5,t:9,p:{time:'09:00',title:'Hike — Mt. Tam',color:'green',expanded:true,meta:'trailhead 8:40'}}
+      ].map(b=>({x:gut+b.col*colW+4,top:hy(b.t),w:colW-10,p:b.p})),
+      kyotoL:gut+3*colW+4, kyotoW:colW*3-10, wedX:gut+2*colW+8, thuX:gut+3*colW+8,
+      dayHours:Array.from({length:12},(_,i)=>({top:i*46,label:(8+i)+':00'})),
+      dentistTop:6*46+4, reviewTop:9.5*46, nowTop:3.4*46,
+      dayTasks:[{label:'Order paper stock',priority:'high'},{label:'Send files to printer',due:'by 5pm'},{label:'Reply to fair organizers',done:true}],
+      dayImgW:150, dayImgH:100,
+      yearMonths:this.buildYear(),
+      zoomPct:Math.round(z*100),
+      zoomIn:()=>this.setState({zoom:Math.min(1.8,z+0.1),animT:true}),
+      zoomOut:()=>this.setState({zoom:Math.max(0.35,z-0.1),animT:true}),
+      fitMonth:()=>this.setState({tier:'Month',zoom:0.92,pan:{x:0,y:0},animT:true}),
+      fitYear:()=>this.setState({tier:'Year',zoom:0.92,pan:{x:0,y:0},animT:true}),
+      layersOn:(this.props.showLayerPanel??true)&&!s.searchOpen&&!s.pal,
+      layerProps:{layers:[{name:'Work',color:'indigo'},{name:'Personal',color:'coral'},{name:'Notes',color:'yellow'},{name:'Handwriting',color:'olive',locked:true},{name:'Photos',color:'teal',visible:false}]},
+      inspOpen:!!inspKind, inspTitle:inspKind==='sticky'?'Sticky note':inspKind==='event'?'Event':inspKind==='image'?'Image':inspKind==='file'?'Attachment':'Text',
+      inspSticky:inspKind==='sticky', inspEvent:inspKind==='event', inspImage:inspKind==='image', inspGeneric:inspKind==='file'||inspKind==='text',
+      noteColor:s.noteColor, setNoteColor:(v)=>this.setState({noteColor:v}),
+      op100:100, selX:selFloat?Math.round(selFloat.x):0, selY:selFloat?Math.round(selFloat.y):0, selRot:selFloat?selFloat.rot:0,
+      evTitle:s.evTitle, setEvTitle:(e)=>this.setState({evTitle:e.target.value}), evTime:s.evTime,
+      evColor:s.evColor, evRecurring:true, evReminder:true,
+      calSegProps:{options:['Work','Personal']}, frameSegProps:{options:['Plain','Framed','Taped']},
+      imgCaption:s.imgCaption, setImgCaption:(e)=>this.setState({imgCaption:e.target.value})
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+:root{
+/* Foundation surfaces — warm paper neutrals */
+--surface-canvas:#EBE8E0;
+--surface-paper:#F6F4EE;
+--surface-raised:#FCFBF7;
+--surface-toolbar:#F1EFE8;
+--surface-inspector:#F6F4EF;
+--surface-menu:#FCFBF7;
+--divider:#E2DED3;
+--border:#D5D0C3;
+--border-strong:#B4AD9C;
+/* Ink hierarchy */
+--ink-primary:#2B2822;
+--ink-secondary:#5C574C;
+--ink-muted:#877F70;
+--ink-disabled:#B5AFA1;
+--ink-inverse:#F8F6F0;
+/* Accent — burnt ochre (stamp ink) */
+--accent:#9C5310;
+--accent-hover:#8A4A0E;
+--accent-pressed:#77400C;
+--accent-soft:#F2E3CD;
+--accent-ink:#7C420C;
+/* Interaction */
+--hover:rgba(43,40,34,.05);
+--pressed:rgba(43,40,34,.09);
+--focus-ring:#3B62A8;
+--selection:#3B62A8;
+--selection-soft:rgba(59,98,168,.12);
+--selection-handle:#FCFBF7;
+/* Semantic */
+--success:#4C7A43;--success-soft:#E2ECDD;
+--warning:#A2690B;--warning-soft:#F4E8CE;
+--danger:#B0392E;--danger-soft:#F4DDD9;
+--info:#33608C;--info-soft:#DFE8F1;
+/* Stationery palette: fill / ink pairing / soft tint */
+--stationery-yellow:#F3E296;--stationery-yellow-ink:#6B5410;--stationery-yellow-soft:#FAF2CE;
+--stationery-coral:#EFAB8F;--stationery-coral-ink:#83381A;--stationery-coral-soft:#F9DFD3;
+--stationery-rose:#EAAAB6;--stationery-rose-ink:#8A3549;--stationery-rose-soft:#F8DFE4;
+--stationery-red:#D9776B;--stationery-red-ink:#7E241C;--stationery-red-soft:#F5D8D4;
+--stationery-orange:#EDB579;--stationery-orange-ink:#824D0B;--stationery-orange-soft:#F9E5CB;
+--stationery-olive:#C6C185;--stationery-olive-ink:#54521A;--stationery-olive-soft:#EDEBCF;
+--stationery-green:#ABC89C;--stationery-green-ink:#3A5730;--stationery-green-soft:#E1EDDA;
+--stationery-mint:#A9D8C4;--stationery-mint-ink:#295847;--stationery-mint-soft:#DDF0E7;
+--stationery-teal:#90C2C2;--stationery-teal-ink:#1F5454;--stationery-teal-soft:#D9ECEC;
+--stationery-blue:#9FBFD8;--stationery-blue-ink:#2A4F6E;--stationery-blue-soft:#DEEAF3;
+--stationery-indigo:#9BA7CD;--stationery-indigo-ink:#333F69;--stationery-indigo-soft:#DFE3F1;
+--stationery-violet:#B4A4CE;--stationery-violet-ink:#493A6A;--stationery-violet-soft:#E7E1F1;
+--stationery-lavender:#C9BEDC;--stationery-lavender-ink:#52466C;--stationery-lavender-soft:#EEEAF5;
+/* Paper texture (extremely subtle ruled tint) */
+--rule-line:rgba(59,98,168,.10);
+--grid-line:rgba(43,40,34,.045);
+}

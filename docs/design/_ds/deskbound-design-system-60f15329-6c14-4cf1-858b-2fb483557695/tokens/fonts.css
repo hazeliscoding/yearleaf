@@ -1,0 +1,7 @@
+/* Google Fonts stand-ins (no brand font binaries were provided) */
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Zilla+Slab:ital,wght@0,400;0,500;0,600;1,400&family=Gochi+Hand&display=swap');
+:root{
+--font-ui:'Hanken Grotesk',system-ui,-apple-system,sans-serif;
+--font-calendar:'Zilla Slab',Rockwell,'Roboto Slab',serif;
+--font-hand:'Gochi Hand','Segoe Print',cursive;
+}

@@ -1,0 +1,10 @@
+:root{
+/* Compact desktop-software scale */
+--space-2:2px;--space-4:4px;--space-6:6px;--space-8:8px;--space-12:12px;--space-16:16px;--space-20:20px;--space-24:24px;--space-32:32px;--space-40:40px;--space-48:48px;--space-64:64px;
+/* Control sizing */
+--control-h-sm:24px;--control-h:28px;--control-h-lg:34px;
+--toolbar-h:44px;--tool-btn:32px;--inspector-w:264px;
+--icon-sm:14px;--icon:16px;--icon-lg:20px;
+/* Canvas scale thresholds (zoom fractions where detail tiers switch) */
+--zoom-year:0.12;/* @kind other */--zoom-month:0.35;/* @kind other */--zoom-week:0.75;/* @kind other */--zoom-day:1.5;/* @kind other */
+}

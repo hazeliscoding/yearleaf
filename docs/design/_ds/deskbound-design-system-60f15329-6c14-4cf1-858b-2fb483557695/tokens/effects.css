@@ -1,0 +1,19 @@
+:root{
+--radius-none:0;--radius-subtle:3px;--radius-standard:5px;--radius-soft:8px;--radius-round:999px;
+--border-w:1px;--border-w-strong:1.5px;
+/* Shallow elevation: 0 flat, 1 toolbar/raised, 2 menu, 3 dragged, 4 modal/palette */
+--shadow-0:none;
+--shadow-1:0 1px 2px rgba(43,40,34,.08);
+--shadow-2:0 2px 8px rgba(43,40,34,.10),0 1px 2px rgba(43,40,34,.06);
+--shadow-3:0 6px 18px rgba(43,40,34,.14),0 2px 4px rgba(43,40,34,.08);
+--shadow-4:0 12px 32px rgba(43,40,34,.18),0 3px 8px rgba(43,40,34,.08);
+--shadow-dragging:var(--shadow-3);
+--shadow-paper:0 1px 3px rgba(43,40,34,.10),0 1px 1px rgba(43,40,34,.05);
+/* Motion — quick, physical */
+--ease-out:cubic-bezier(.2,0,0,1);/* @kind other */
+--ease-spring:cubic-bezier(.3,1.4,.4,1);/* @kind other */
+--motion-fast:110ms;/* @kind other */--motion-standard:170ms;/* @kind other */--motion-slow:260ms;/* @kind other */--motion-canvas-zoom:320ms;/* @kind other */
+/* Z-index */
+--z-canvas:0;/* @kind other */--z-object-drag:100;/* @kind other */--z-toolbar:200;/* @kind other */--z-inspector:210;/* @kind other */--z-popover:400;/* @kind other */--z-menu:500;/* @kind other */--z-modal:600;/* @kind other */--z-palette:700;/* @kind other */--z-tooltip:800;/* @kind other */
+}
+@media (prefers-reduced-motion:reduce){:root{--motion-fast:0ms;/* @kind other */--motion-standard:0ms;/* @kind other */--motion-slow:0ms;/* @kind other */--motion-canvas-zoom:0ms/* @kind other */}}

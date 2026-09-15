@@ -1,0 +1,6 @@
+body{margin:0;font:var(--text-body);color:var(--ink-primary);background:var(--surface-paper);-webkit-font-smoothing:antialiased}
+a{color:var(--accent-ink);text-decoration-color:var(--border-strong);text-underline-offset:2px}
+a:hover{color:var(--accent-hover)}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+::selection{background:var(--selection-soft)}
+.db-numeral{font-feature-settings:var(--numeral-features)}

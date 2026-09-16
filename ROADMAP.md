@@ -51,8 +51,8 @@ multi-select, and sharper text rasterization at high zoom.
 
 ## Milestone 4 — Objects and input depth (delivery steps 6–7)
 
-- [ ] Event, task, and sticky editing flows (create via tools, edit via DOM overlays) — including checklist stickies: today notes with `items` are excluded from the overlay editor and their checkboxes cannot be toggled
-- [ ] Fix: transient flash when an object is added or deleted (object views are destroyed and rebuilt on change — `scene-controller.setObjects`; investigate render scheduling)
+- [ ] Event, task, and sticky editing flows (create via tools, edit via DOM overlays) — checklist stickies are done: checkboxes toggle on click, items edit line-per-line in the overlay
+- [x] Fix: transient flash when an object is added or deleted (was the inspector opening/closing — the renderer resize composited one blank frame; now renders synchronously on resize)
 - [ ] Recurrence rules and their relationship to moved/annotated occurrences (ADR open question)
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums

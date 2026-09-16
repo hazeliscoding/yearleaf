@@ -104,11 +104,18 @@ export class CalendarSceneController {
       preference: 'webgl',
     });
 
-    // Text must rasterize with the document's fonts, not fallbacks.
+    // Text must rasterize with the document's fonts, not fallbacks. Webfonts
+    // are only fetched once DOM text uses them, and no DOM element uses the
+    // hand/calendar families on a fresh desk — so `fonts.ready` resolves
+    // before they exist. Request each family the scene draws with explicitly.
     try {
-      await document.fonts?.ready;
+      await Promise.all(
+        [this.theme.fontUI, this.theme.fontCalendar, this.theme.fontHand].map((family) =>
+          document.fonts.load(`16px "${family}"`),
+        ),
+      );
     } catch {
-      // Font readiness is best-effort; fallback rendering is acceptable.
+      // Font loading is best-effort; fallback rendering is acceptable.
     }
 
     this.gridLayer = new Graphics();

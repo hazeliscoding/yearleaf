@@ -156,7 +156,10 @@ export class CalendarSceneController {
     this.app.renderer.resize(width, height);
     this.syncMonths();
     this.redrawGrid();
-    this.markDirty();
+    // Resizing clears the canvas buffer; a deferred (markDirty) repaint lets
+    // the browser composite one blank frame — visible as a flash whenever
+    // the inspector opens or closes. Render synchronously instead.
+    this.app.render();
   }
 
   /** Applies a new pan/zoom state and re-culls visible months. */
@@ -178,7 +181,7 @@ export class CalendarSceneController {
       seen.add(object.id);
       const previous = this.objects.get(object.id);
       if (previous !== object) {
-        this.objectViews.get(object.id)?.destroy();
+        this.objectViews.get(object.id)?.destroy({ children: true });
         const view = buildObjectView(object, this.theme);
         view.visible = this.editing !== object.id;
         this.layerFor(object).addChild(view);
@@ -189,7 +192,7 @@ export class CalendarSceneController {
     }
     for (const id of [...this.objects.keys()]) {
       if (!seen.has(id)) {
-        this.objectViews.get(id)?.destroy();
+        this.objectViews.get(id)?.destroy({ children: true });
         this.objectViews.delete(id);
         this.objects.delete(id);
         this.index.remove(id);
@@ -213,7 +216,7 @@ export class CalendarSceneController {
     const effective = rect ?? rectOfObject(object);
     const resized = effective.width !== object.width || effective.height !== object.height;
     if (resized) {
-      view.destroy();
+      view.destroy({ children: true });
       const rebuilt = buildObjectView(
         { ...object, x: effective.x, y: effective.y, width: effective.width, height: effective.height },
         this.theme,
@@ -258,7 +261,7 @@ export class CalendarSceneController {
     for (const [id, view] of this.objectViews) {
       const object = this.objects.get(id);
       if (!object) continue;
-      view.destroy();
+      view.destroy({ children: true });
       const rebuilt = buildObjectView(object, this.theme);
       rebuilt.visible = this.editing !== id;
       this.layerFor(object).addChild(rebuilt);

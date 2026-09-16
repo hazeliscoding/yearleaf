@@ -53,7 +53,11 @@ multi-select, and sharper text rasterization at high zoom.
 
 - [ ] Event, task, and sticky editing flows (create via tools, edit via DOM overlays) — checklist toggling/editing is done, but there is still no way to *create* a checklist sticky, and the Task tool arms without doing anything (persona finding)
 - [ ] Fix: extended punctuation (em dash, arrows, accents) renders as tofu in newly typed sticky text — hand-font glyph coverage in the canvas rasterization (persona finding)
-- [ ] UX findings from the 2026-09-16 persona smoke test (Priya): "Fit month" fits the screen-center month instead of the working month; no way back to the previous month after a year-view detour; floating panels obscure drop targets in year view; sticky editor shows no visible caret
+- [ ] Fix: armed creation tools are inert — Text/Sticky/Event/Task tool clicks and the "New event" button create nothing, and `N` spawns at viewport center ignoring where the user clicked (all three personas hit this; Priya's and June's give-up moments)
+- [ ] Fix: empty "start typing…" draft text objects persist instead of being discarded, and stray double-clicks on day cells create them invisibly; a new sticky's placeholder text is not preselected on first edit ("new noteReunion at…")
+- [ ] Fix: `Shift+T` (the palette's advertised Today shortcut) is swallowed by the Text tool binding; `Ctrl+Y` doesn't redo on Windows
+- [ ] Multi-select and the lasso: the lasso tool arms but does nothing, marquee-drag pans, Shift+click doesn't extend — promoted from the milestone-2 deferral by persona demand; duplicate/copy-paste of objects belongs with it
+- [ ] Navigation UX from the 2026-09-16 persona smoke tests: "Fit month" fits the screen-center month, not the working month; no next/previous-month affordance and no horizontal wheel panning (the 3×4 layout defeats "next page is below"); year-zoom scrolling overshoots by years; no way back after a year-view detour; floating panels obscure drop targets; sticky editor shows no visible caret; tooltips clip at the screen edge; long sticky content overflows the note; no visible delete affordance in the inspector
 - [x] Fix: transient flash when an object is added or deleted (was the inspector opening/closing — the renderer resize composited one blank frame; now renders synchronously on resize)
 - [ ] Recurrence rules and their relationship to moved/annotated occurrences (ADR open question)
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
@@ -62,7 +66,7 @@ multi-select, and sharper text rasterization at high zoom.
 ## Milestone 5 — Findability and safety (delivery step 8)
 
 - [ ] Universal search over real structured text and metadata (today's index is a sample)
-- [ ] Command palette wired to the full command set
+- [ ] Command palette wired to the full command set — today it is decorative (persona finding): typing filters nothing, arrow keys don't move the highlight, Enter blindly runs the first row, "Type a command or date…" parses no dates, and the sample rows show a hardcoded stale "Today — Sep 15, 2026"
 - [ ] Export/backup that restores a complete desk, including attachments and version metadata
 - [ ] Automatic local backups and recovery after interrupted imports
 

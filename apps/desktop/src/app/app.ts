@@ -53,7 +53,7 @@ const NUDGE_LARGE = 64;
       @if (paletteOpen()) {
         <div
           data-screen-label="Command palette"
-          style="position:absolute;inset:0;background:rgba(43,40,34,.18);display:flex;justify-content:center;padding-top:64px;z-index:700"
+          style="position:absolute;inset:0;background:var(--scrim,rgba(43,40,34,.18));display:flex;justify-content:center;padding-top:64px;z-index:var(--z-palette,700)"
           (click)="paletteOpen.set(false)"
         >
           <div style="align-self:flex-start" (click)="$event.stopPropagation()">

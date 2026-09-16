@@ -43,18 +43,16 @@ multi-select, and sharper text rasterization at high zoom.
 
 ## Milestone 3 — Desktop shell and persistence (delivery steps 1 & 5)
 
-- [ ] Tauri 2 shell: window management, native dialogs, packaging for Windows/macOS/Linux
-- [ ] SQLite behind narrow Tauri commands (WAL enabled); integration decided: rusqlite + rusqlite_migration ([design record](docs/design-sqlite-persistence.md))
-- [ ] Schema v1: `desk`, `calendar`, `calendar_object`, `event`, `attachment`, `tag`, `setting` with versioned migrations
-- [ ] Reopen the last desk on launch; crash-safe write flushing
-- [ ] `SQLitePersistence` implementing the `@infinite-desk/persistence` contracts
-- [ ] Generate and vault the Tauri updater signing keypair before the first shipped build (losing it strands installed apps on old versions)
-- [ ] Set up Azure Trusted Signing for Windows builds and wire it into CI (decided; same route as pr-sweep)
-- [ ] GitHub Actions release pipeline — build, sign, and bundle per platform — modeled on pr-sweep's CI/CD
+- [x] Tauri 2 shell: window management, capability ACL, dev/build wiring (native dialogs land with the features that need them; packaging moved to milestone 6)
+- [x] SQLite behind narrow Tauri commands (WAL enabled): rusqlite + rusqlite_migration ([design record](docs/design-sqlite-persistence.md)) — no SQL crosses IPC
+- [ ] Schema v1: `desk` and `calendar_object` shipped as migration 1; `calendar`, `event`, `attachment`, `tag`, `setting` land as later migrations alongside their features
+- [x] Reopen the last desk on launch (single `default` desk for now); crash-safe flushing — one transaction per committed command, WAL replay on reopen
+- [x] `SQLitePersistence` implementing the `@infinite-desk/persistence` contracts, injected only under Tauri (in-memory fallback in the browser)
 
 ## Milestone 4 — Objects and input depth (delivery steps 6–7)
 
-- [ ] Event, task, and sticky editing flows (create via tools, edit via DOM overlays)
+- [ ] Event, task, and sticky editing flows (create via tools, edit via DOM overlays) — including checklist stickies: today notes with `items` are excluded from the overlay editor and their checkboxes cannot be toggled
+- [ ] Fix: transient flash when an object is added or deleted (object views are destroyed and rebuilt on change — `scene-controller.setObjects`; investigate render scheduling)
 - [ ] Recurrence rules and their relationship to moved/annotated occurrences (ADR open question)
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums
@@ -71,7 +69,10 @@ multi-select, and sharper text rasterization at high zoom.
 - [ ] Accessibility: keyboard access to every tool, accessible structured mirrors of canvas content, screen-reader passes
 - [ ] Playwright end-to-end suite covering the ADR's priority scenarios
 - [ ] Performance budgets measured on dense, lived-in desks (frame time, hit-test latency, open time, memory)
-- [ ] Cross-platform webview testing; packaging and updates through the signed release pipeline (Windows: Azure Trusted Signing; macOS: Developer ID + notarization)
+- [ ] Cross-platform webview testing; packaging for Windows/macOS/Linux
+- [ ] Generate and vault the Tauri updater signing keypair before the first shipped build (losing it strands installed apps on old versions)
+- [ ] Set up Azure Trusted Signing for Windows builds and wire it into CI (decided; same route as pr-sweep); macOS: Developer ID + notarization
+- [ ] GitHub Actions release pipeline — build, sign, and bundle per platform — modeled on pr-sweep's CI/CD
 
 ## Beyond Version 1 (explicitly deferred)
 

@@ -51,7 +51,9 @@ multi-select, and sharper text rasterization at high zoom.
 
 ## Milestone 4 — Objects and input depth (delivery steps 6–7)
 
-- [ ] Event, task, and sticky editing flows (create via tools, edit via DOM overlays) — checklist stickies are done: checkboxes toggle on click, items edit line-per-line in the overlay
+- [ ] Event, task, and sticky editing flows (create via tools, edit via DOM overlays) — checklist toggling/editing is done, but there is still no way to *create* a checklist sticky, and the Task tool arms without doing anything (persona finding)
+- [ ] Fix: extended punctuation (em dash, arrows, accents) renders as tofu in newly typed sticky text — hand-font glyph coverage in the canvas rasterization (persona finding)
+- [ ] UX findings from the 2026-09-16 persona smoke test (Priya): "Fit month" fits the screen-center month instead of the working month; no way back to the previous month after a year-view detour; floating panels obscure drop targets in year view; sticky editor shows no visible caret
 - [x] Fix: transient flash when an object is added or deleted (was the inspector opening/closing — the renderer resize composited one blank frame; now renders synchronously on resize)
 - [ ] Recurrence rules and their relationship to moved/annotated occurrences (ADR open question)
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)

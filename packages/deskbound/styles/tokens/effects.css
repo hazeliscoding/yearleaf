@@ -9,11 +9,35 @@
 --shadow-4:0 12px 32px rgba(43,40,34,.18),0 3px 8px rgba(43,40,34,.08);
 --shadow-dragging:var(--shadow-3);
 --shadow-paper:0 1px 3px rgba(43,40,34,.10),0 1px 1px rgba(43,40,34,.05);
+/* Dimming behind dismissible overlays (command palette, search) */
+--scrim:rgba(43,40,34,.18);
+/* Base color of cast shadows, for surfaces that mix their own alpha
+   (the PixiJS canvas objects) rather than using the shadow ramp above. */
+--shadow-ink:#2B2822;
 /* Motion — quick, physical */
 --ease-out:cubic-bezier(.2,0,0,1);/* @kind other */
 --ease-spring:cubic-bezier(.3,1.4,.4,1);/* @kind other */
 --motion-fast:110ms;/* @kind other */--motion-standard:170ms;/* @kind other */--motion-slow:260ms;/* @kind other */--motion-canvas-zoom:320ms;/* @kind other */
 /* Z-index */
 --z-canvas:0;/* @kind other */--z-object-drag:100;/* @kind other */--z-toolbar:200;/* @kind other */--z-inspector:210;/* @kind other */--z-popover:400;/* @kind other */--z-menu:500;/* @kind other */--z-modal:600;/* @kind other */--z-palette:700;/* @kind other */--z-tooltip:800;/* @kind other */
+}
+/*
+ * Dark theme re-bases elevation on black. The light shadows are tinted with
+ * the paper ink (#2B2822), which is *lighter* than the dark canvas (#211F1B)
+ * — they read as a faint halo instead of a shadow, so raised panels lose
+ * their edge against the desk.
+ *
+ * `:root[data-theme]` (0,2,0) deliberately outranks the `:root` block above
+ * rather than relying on source order, so these survive any future @import
+ * shuffle in index.css.
+ */
+:root[data-theme="dark"]{
+--shadow-1:0 1px 2px rgba(0,0,0,.36);
+--shadow-2:0 2px 8px rgba(0,0,0,.44),0 1px 2px rgba(0,0,0,.30);
+--shadow-3:0 6px 18px rgba(0,0,0,.50),0 2px 4px rgba(0,0,0,.34);
+--shadow-4:0 12px 32px rgba(0,0,0,.58),0 3px 8px rgba(0,0,0,.36);
+--shadow-paper:0 1px 3px rgba(0,0,0,.38),0 1px 1px rgba(0,0,0,.26);
+--scrim:rgba(0,0,0,.46);
+--shadow-ink:#000000;
 }
 @media (prefers-reduced-motion:reduce){:root{--motion-fast:0ms;/* @kind other */--motion-standard:0ms;/* @kind other */--motion-slow:0ms;/* @kind other */--motion-canvas-zoom:0ms/* @kind other */}}

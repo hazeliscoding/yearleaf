@@ -60,7 +60,7 @@ function buildSticky(container: Container, object: DeskObject, theme: ThemeToken
   const palette = theme.stationery[object.payload.color] ?? theme.stationery.yellow;
 
   const paper = new Graphics();
-  paper.roundRect(3, 5, width, height, 3).fill({ color: 0x2b2822, alpha: 0.12 }); // soft shadow
+  paper.roundRect(3, 5, width, height, 3).fill({ color: theme.shadowInk, alpha: 0.12 }); // soft shadow
   paper.roundRect(0, 0, width, height, 3).fill(palette.fill);
   container.addChild(paper);
 
@@ -131,7 +131,7 @@ function buildImage(container: Container, object: DeskObject, theme: ThemeTokens
   const photoH = height - captionH;
 
   const photo = new Graphics();
-  photo.rect(2, 4, width, photoH).fill({ color: 0x2b2822, alpha: 0.1 });
+  photo.rect(2, 4, width, photoH).fill({ color: theme.shadowInk, alpha: 0.1 });
   photo
     .rect(0, 0, width, photoH)
     .fill(mixColors(theme.stationery.teal.soft, theme.stationery.blue.soft, 0.5));
@@ -166,7 +166,7 @@ function buildFile(container: Container, object: DeskObject, theme: ThemeTokens)
   const palette = theme.stationery[kind.c];
 
   const chip = new Graphics();
-  chip.roundRect(2, 4, width, height, 6).fill({ color: 0x2b2822, alpha: 0.08 });
+  chip.roundRect(2, 4, width, height, 6).fill({ color: theme.shadowInk, alpha: 0.08 });
   chip
     .roundRect(0, 0, width, height, 6)
     .fill(theme.surfaceRaised)

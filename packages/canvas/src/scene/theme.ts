@@ -40,6 +40,12 @@ export interface ThemeTokens {
   readonly info: number;
   readonly gridLine: AlphaColor;
   readonly ruleLine: AlphaColor;
+  /**
+   * Base color for shadows the scene mixes its own alpha into. Dark themes
+   * re-base this on black: the light paper ink is *lighter* than the dark
+   * canvas, so a shadow drawn with it brightens the desk instead.
+   */
+  readonly shadowInk: number;
   readonly stationery: Readonly<Record<StationeryColor, StationeryTriple>>;
   /** Primary family names extracted from the font tokens. */
   readonly fontUI: string;
@@ -128,6 +134,7 @@ export function readThemeTokens(element: Element = document.documentElement): Th
     info: color('--info'),
     gridLine: alphaColor('--grid-line'),
     ruleLine: alphaColor('--rule-line'),
+    shadowInk: color('--shadow-ink'),
     stationery,
     fontUI: primaryFamily(styles.getPropertyValue('--font-ui'), 'sans-serif'),
     fontCalendar: primaryFamily(styles.getPropertyValue('--font-calendar'), 'serif'),

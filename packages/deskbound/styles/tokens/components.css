@@ -84,7 +84,14 @@ textarea.db-input{height:auto;min-height:56px;padding:6px 8px;resize:vertical}
 .db-field .db-help{font:var(--text-caption);color:var(--ink-muted)}
 .db-field .db-help[data-invalid="true"]{color:var(--danger)}
 .db-search{position:relative;display:flex;align-items:center}
-.db-search svg{position:absolute;left:8px;width:13px;height:13px;stroke-width:1.5;color:var(--ink-muted);pointer-events:none}
+/* The glyph overlays the input, so whichever element *wraps* it must leave the
+   flow — a bare <svg> in plain markup, a <db-icon> host in the Angular
+   component. Positioning only the inner svg leaves that wrapper as a flex
+   item, which shunts the input sideways and strands the glyph outside the
+   field's left border. Listed positively so a future trailing control
+   (clear button, kbd hint) is not caught by the same rule. */
+.db-search>svg,.db-search>db-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:var(--ink-muted);pointer-events:none}
+.db-search svg{width:13px;height:13px;stroke-width:1.5}
 .db-search .db-input{padding-left:26px}
 .db-select{position:relative}
 .db-select select{appearance:none;padding-right:22px;cursor:pointer}

@@ -43,7 +43,15 @@ export interface DbPaletteGroup {
   selector: 'db-command-palette',
   imports: [DbIcon, DbKbd],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'db-palette', role: 'dialog', 'aria-label': 'Command palette' },
+  // `display:block` is required on the host: a custom element defaults to
+  // inline, which drops the class's width and overflow and paints the panel
+  // background as fragmented line boxes (same fix as DbInspectorPanel).
+  host: {
+    class: 'db-palette',
+    style: 'display:block',
+    role: 'dialog',
+    'aria-label': 'Command palette',
+  },
   template: `
     <div class="db-palette-input">
       <db-icon name="command" [size]="15" />

@@ -59,6 +59,10 @@ multi-select, and sharper text rasterization at high zoom.
 - [ ] Multi-select and the lasso: the lasso tool arms but does nothing, marquee-drag pans, Shift+click doesn't extend — promoted from the milestone-2 deferral by persona demand; duplicate/copy-paste of objects belongs with it
 - [ ] Navigation UX from the 2026-09-16 persona smoke tests: "Fit month" fits the screen-center month, not the working month; no next/previous-month affordance and no horizontal wheel panning (the 3×4 layout defeats "next page is below"); year-zoom scrolling overshoots by years; no way back after a year-view detour; floating panels obscure drop targets; sticky editor shows no visible caret; tooltips clip at the screen edge; long sticky content overflows the note; no visible delete affordance in the inspector
 - [x] Fix: transient flash when an object is added or deleted (was the inspector opening/closing — the renderer resize composited one blank frame; now renders synchronously on resize)
+- [x] Fix: the command palette rendered as an inline box (calendar read through it) and the toolbar search glyph sat outside the field; dark theme had no shadow re-base, so panels and canvas objects cast no usable shadow
+- [ ] Remaining chrome defects from the 2026-09-16 design review (design-system side): the palette's scrollable list bisects a row at the rounded bottom edge with no scroll affordance; the inspector's Opacity row overflows the 264px panel ("100%" clips) and Rotation renders a raw float (`-0.523620739956715`); the ⎋ keycap reads as a prohibition sign at 10.5px; the floating zoom control and layer panel use `--shadow-1` where the system's own floating recipe specifies `--shadow-2`
+- [ ] Remaining hardcoded alphas that were never re-based for dark (same class as the shadow fix): the tooltip keycap is white-on-cream and loses its edge entirely, inspector colour swatches lose their border on the dark panel, and the sticky fold/pin/tape fills in `objects.css` are unaudited
+- [ ] Decide whether overlays are truly modal: the palette and search scrims are `inset:0` inside the canvas cell, so the toolbar and tool rail stay fully lit and clickable behind an open overlay while the zoom control is dimmed — one rule either way, no seam at the chrome edge
 - [ ] Recurrence rules and their relationship to moved/annotated occurrences (ADR open question)
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums
@@ -73,6 +77,8 @@ multi-select, and sharper text rasterization at high zoom.
 ## Milestone 6 — First release hardening (delivery step 9)
 
 - [ ] Accessibility: keyboard access to every tool, accessible structured mirrors of canvas content, screen-reader passes
+- [ ] Contrast: `--ink-muted` carries caption and metadata text but measures 3.0–4.4:1 on every surface it lands on, in both themes (worst: the 8.5px tool-rail key hint at 3.14:1 on a selected row) — either re-tune the token or move small text to `--ink-secondary`
+- [ ] One focus vocabulary: `base.css` gives a 2px `--focus-ring` outline, `.db-input:focus` replaces it with a thinner 1px box-shadow that also fires on mouse focus, and the overlay inputs set `outline:none` with no replacement at all
 - [ ] Playwright end-to-end suite covering the ADR's priority scenarios
 - [ ] Performance budgets measured on dense, lived-in desks (frame time, hit-test latency, open time, memory)
 - [ ] Cross-platform webview testing; packaging for Windows/macOS/Linux

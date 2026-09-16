@@ -8,6 +8,8 @@ out/
 .angular/
 coverage/
 src-tauri/target/
+playwright-report/
+test-results/
 
 # Environment & local config
 .env

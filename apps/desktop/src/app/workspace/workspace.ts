@@ -67,6 +67,7 @@ const HANDLE_RADIUS = 16;
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     'data-screen-label': 'Canvas',
+    '[attr.data-scene-ready]': 'sceneReady()',
     style: 'position:relative;overflow:hidden;background:var(--surface-canvas);display:block',
     '[style.cursor]': 'tools.canvasCursor()',
     '(pointerdown)': 'onPointerDown($event)',

@@ -101,6 +101,19 @@ export class App {
     if (tier === 'Day' || tier === 'Week' || tier === 'Month' || tier === 'Year') {
       this.viewport.initialTier = tier as Tier;
     }
+    // `?e2e` exposes a read-only bridge so Playwright can locate canvas
+    // content and convert world to screen coordinates for real clicks.
+    if (params.has('e2e')) {
+      (globalThis as unknown as Record<string, unknown>)['__e2e'] = {
+        floats: () => this.desk.floats(),
+        viewport: () => this.viewport.viewport(),
+        panTo: (x: number, y: number) => this.viewport.panTo(x, y),
+        toScreen: (x: number, y: number) => {
+          const v = this.viewport.viewport();
+          return { x: v.panX + x * v.zoom, y: v.panY + y * v.zoom };
+        },
+      };
+    }
   }
 
   /** Jumps home: centers today's cell and flashes it. */

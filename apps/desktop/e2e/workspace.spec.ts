@@ -1,0 +1,158 @@
+/**
+ * Canvas interaction end-to-end tests. The app is started with `?e2e`,
+ * which exposes a read-only bridge (`__e2e`) for locating canvas content;
+ * every interaction is a real click or keypress against the PixiJS canvas.
+ */
+
+import { expect, test, type Page } from '@playwright/test';
+
+import {
+  CHECKLIST_BOX,
+  CHECKLIST_BOX_OFFSET_Y,
+  CHECKLIST_ROW_H,
+  STICKY_PAD,
+} from '../../../packages/canvas/src/sticky-layout';
+
+/** Minimal float shape mirrored from the domain package. */
+interface FloatData {
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly payload: {
+    readonly kind: string;
+    readonly text?: string;
+    readonly items?: readonly { label: string; done?: boolean }[];
+  };
+}
+
+declare global {
+  interface Window {
+    __e2e: {
+      floats(): readonly FloatData[];
+      viewport(): { panX: number; panY: number; zoom: number };
+      panTo(x: number, y: number): void;
+      toScreen(x: number, y: number): { x: number; y: number };
+    };
+  }
+}
+
+async function openWorkspace(page: Page): Promise<void> {
+  await page.goto('/?e2e');
+  await page.locator('[data-scene-ready="true"]').waitFor();
+}
+
+async function floats(page: Page): Promise<readonly FloatData[]> {
+  return page.evaluate(() => window.__e2e.floats());
+}
+
+/** Pans so the world point sits at the workspace center. */
+async function centerOn(page: Page, worldX: number, worldY: number): Promise<void> {
+  const host = await page.locator('[data-screen-label="Canvas"]').boundingBox();
+  if (!host) throw new Error('workspace not laid out');
+  await page.evaluate(
+    ([wx, wy, cx, cy]) => {
+      const zoom = window.__e2e.viewport().zoom;
+      window.__e2e.panTo(cx - wx * zoom, cy - wy * zoom);
+    },
+    [worldX, worldY, host.width / 2, host.height / 2],
+  );
+}
+
+/** Viewport-absolute screen position of a world point. */
+async function screenPoint(
+  page: Page,
+  worldX: number,
+  worldY: number,
+): Promise<{ x: number; y: number }> {
+  const host = await page.locator('[data-screen-label="Canvas"]').boundingBox();
+  if (!host) throw new Error('workspace not laid out');
+  const local = await page.evaluate(
+    ([wx, wy]) => window.__e2e.toScreen(wx, wy),
+    [worldX, worldY],
+  );
+  return { x: host.x + local.x, y: host.y + local.y };
+}
+
+test('scene fonts are fetched before first paint', async ({ page }) => {
+  await openWorkspace(page);
+  // The hand font is used by no DOM element on a fresh desk, so only the
+  // scene's explicit fonts.load keeps this from rasterizing as a fallback.
+  expect(await page.evaluate(() => document.fonts.check('16px "Gochi Hand"'))).toBe(true);
+  expect(await page.evaluate(() => document.fonts.check('16px "Hanken Grotesk"'))).toBe(true);
+});
+
+test('N creates a sticky and double-click edits it in place', async ({ page }) => {
+  await openWorkspace(page);
+  const before = (await floats(page)).length;
+
+  await page.keyboard.press('n');
+  const created = (await floats(page)).at(-1);
+  expect((await floats(page)).length).toBe(before + 1);
+  expect(created?.payload.kind).toBe('sticky');
+  expect(created?.payload.text).toBe('new note');
+
+  const center = await screenPoint(
+    page,
+    created!.x + created!.width / 2,
+    created!.y + created!.height / 2,
+  );
+  await page.mouse.dblclick(center.x, center.y);
+  const editor = page.getByLabel('Edit text');
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue('new note');
+
+  await editor.fill('water the plants');
+  await page.keyboard.press('Escape');
+  await expect(editor).toBeHidden();
+  const edited = (await floats(page)).find((f) => f.id === created!.id);
+  expect(edited?.payload.text).toBe('water the plants');
+});
+
+test('clicking a checkbox toggles the item and undo restores it', async ({ page }) => {
+  await openWorkspace(page);
+  const sticky = (await floats(page)).find((f) => f.payload.items?.length);
+  expect(sticky, 'sample desk provides a checklist sticky').toBeTruthy();
+  const index = 1;
+  const wasDone = !!sticky!.payload.items![index].done;
+
+  await centerOn(page, sticky!.x + sticky!.width / 2, sticky!.y + sticky!.height / 2);
+  const box = await screenPoint(
+    page,
+    sticky!.x + STICKY_PAD + CHECKLIST_BOX / 2,
+    sticky!.y + STICKY_PAD + index * CHECKLIST_ROW_H + CHECKLIST_BOX_OFFSET_Y + CHECKLIST_BOX / 2,
+  );
+  await page.mouse.click(box.x, box.y);
+
+  const itemsAfter = async () =>
+    (await floats(page)).find((f) => f.id === sticky!.id)!.payload.items!;
+  expect((await itemsAfter())[index].done ?? false).toBe(!wasDone);
+
+  await page.keyboard.press('Control+z');
+  expect((await itemsAfter())[index].done ?? false).toBe(wasDone);
+});
+
+test('checklist stickies edit line-per-line and keep done state by position', async ({ page }) => {
+  await openWorkspace(page);
+  const sticky = (await floats(page)).find((f) => f.payload.items?.length);
+  const labels = sticky!.payload.items!.map((i) => i.label);
+  const doneBefore = sticky!.payload.items!.map((i) => !!i.done);
+
+  await centerOn(page, sticky!.x + sticky!.width / 2, sticky!.y + sticky!.height / 2);
+  const center = await screenPoint(
+    page,
+    sticky!.x + sticky!.width / 2,
+    sticky!.y + sticky!.height / 2,
+  );
+  await page.mouse.dblclick(center.x, center.y);
+  const editor = page.getByLabel('Edit text');
+  await expect(editor).toBeVisible();
+  await expect(editor).toHaveValue(labels.join('\n'));
+
+  await editor.fill([...labels, 'buy stamps'].join('\n'));
+  await page.keyboard.press('Escape');
+  const items = (await floats(page)).find((f) => f.id === sticky!.id)!.payload.items!;
+  expect(items.map((i) => i.label)).toEqual([...labels, 'buy stamps']);
+  expect(items.map((i) => !!i.done)).toEqual([...doneBefore, false]);
+});

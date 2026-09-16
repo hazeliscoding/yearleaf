@@ -24,6 +24,7 @@ import {
 
 import {
   CalendarSceneController,
+  checklistItemAt,
   screenToWorld,
   type Point,
   type SceneHit,
@@ -161,13 +162,17 @@ export class Workspace {
     if (!object) return null;
     const v = this.viewport.viewport();
     const sticky = object.payload.kind === 'sticky' ? object.payload : null;
+    // Checklist stickies edit as one item per line, in the checklist's own
+    // type metrics (see buildSticky / sticky-layout).
+    const checklist = sticky?.items?.length ? sticky.items : null;
     const compact = !!sticky?.compact;
-    const baseFont = sticky ? (compact ? 22 : 26) : 30;
-    const baseLine = sticky ? (compact ? 26 : 32) : 38;
-    const hand = sticky ? !!sticky.hand : true;
+    const baseFont = checklist ? 20 : sticky ? (compact ? 22 : 26) : 30;
+    const baseLine = checklist ? 30 : sticky ? (compact ? 26 : 32) : 38;
+    const hand = checklist ? false : sticky ? !!sticky.hand : true;
     return {
-      text:
-        object.payload.kind === 'sticky' || object.payload.kind === 'text'
+      text: checklist
+        ? checklist.map((item) => item.label).join('\n')
+        : object.payload.kind === 'sticky' || object.payload.kind === 'text'
           ? object.payload.text
           : '',
       left: v.panX + object.x * v.zoom,
@@ -271,6 +276,12 @@ export class Workspace {
     if (hit?.kind === 'object') {
       const object = this.desk.get(hit.id);
       if (!object) return;
+      const checklistIndex = checklistItemAt(object, world);
+      if (checklistIndex !== null) {
+        this.actions.toggleChecklistItem(hit.id, checklistIndex);
+        this.selection.select(object.payload.kind, hit.id);
+        return;
+      }
       const selected = this.selection.selection()?.id === hit.id;
       if (selected && RESIZABLE.has(object.payload.kind) && this.nearSoutheast(object, world)) {
         this.resizeGesture = {
@@ -316,9 +327,7 @@ export class Workspace {
     if (hit?.kind === 'object') {
       const object = this.desk.get(hit.id);
       if (!object) return;
-      const editable =
-        object.payload.kind === 'text' ||
-        (object.payload.kind === 'sticky' && !object.payload.items?.length);
+      const editable = object.payload.kind === 'text' || object.payload.kind === 'sticky';
       if (editable) this.openEditor(hit.id, false);
       return;
     }
@@ -402,8 +411,19 @@ export class Workspace {
     if (!id) return;
     const text = (event.target as HTMLTextAreaElement).value;
     const object = this.desk.get(id);
-    if (object?.payload.kind === 'text') this.actions.commitTextEdit(id, text);
-    else if (object?.payload.kind === 'sticky') this.actions.setStickyText(id, text);
+    if (object?.payload.kind === 'text') {
+      this.actions.commitTextEdit(id, text);
+    } else if (object?.payload.kind === 'sticky') {
+      if (object.payload.items?.length) {
+        const labels = text
+          .split('\n')
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+        if (labels.length) this.actions.setChecklistItems(id, labels);
+      } else {
+        this.actions.setStickyText(id, text);
+      }
+    }
     this.editingId.set(null);
   }
 

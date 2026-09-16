@@ -114,6 +114,32 @@ export class DeskActions {
     this.commitMove(id, { x: object.x, y: object.y }, { x: object.x + dx, y: object.y + dy });
   }
 
+  /** Toggles one checklist item's done state (undoable). */
+  toggleChecklistItem(id: string, index: number): void {
+    const object = this.desk.get(id);
+    if (!object || object.payload.kind !== 'sticky' || !object.payload.items?.[index]) return;
+    const items = object.payload.items.map((item, i) =>
+      i === index ? { ...item, done: !item.done } : item,
+    );
+    this.history.execute(
+      new UpdatePayloadCommand(this.desk, id, object.payload, { ...object.payload, items }),
+    );
+  }
+
+  /**
+   * Replaces a checklist sticky's items from edited lines; done state is
+   * preserved by position, added lines start unchecked.
+   */
+  setChecklistItems(id: string, labels: readonly string[]): void {
+    const object = this.desk.get(id);
+    if (!object || object.payload.kind !== 'sticky' || !object.payload.items) return;
+    const previous = object.payload.items;
+    const items = labels.map((label, i) => ({ label, done: previous[i]?.done ?? false }));
+    this.history.execute(
+      new UpdatePayloadCommand(this.desk, id, object.payload, { ...object.payload, items }),
+    );
+  }
+
   /** Recolors a sticky note (inspector color picker). */
   setStickyColor(id: string, color: StationeryColor): void {
     const object = this.desk.get(id);

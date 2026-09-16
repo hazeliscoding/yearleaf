@@ -11,6 +11,12 @@ import { Container, Graphics, Text } from 'pixi.js';
 
 import type { DeskObject } from '@infinite-desk/domain';
 
+import {
+  CHECKLIST_BOX,
+  CHECKLIST_BOX_OFFSET_Y,
+  CHECKLIST_ROW_H,
+  stickyPad,
+} from '../sticky-layout';
 import { mixColors, type ThemeTokens } from './theme';
 
 /** File-kind label and tint for the attachment chip's icon square. */
@@ -59,18 +65,21 @@ function buildSticky(container: Container, object: DeskObject, theme: ThemeToken
   container.addChild(paper);
 
   const compact = !!object.payload.compact;
-  const pad = compact ? 14 : 20;
+  const pad = stickyPad(compact);
 
   if (object.payload.items?.length) {
     let y = pad;
+    const boxY = CHECKLIST_BOX_OFFSET_Y;
     for (const item of object.payload.items) {
       const box = new Graphics();
-      box.roundRect(pad, y + 4, 15, 15, 3).stroke({ width: 2, color: palette.ink, alpha: 0.7 });
+      box
+        .roundRect(pad, y + boxY, CHECKLIST_BOX, CHECKLIST_BOX, 3)
+        .stroke({ width: 2, color: palette.ink, alpha: 0.7 });
       if (item.done) {
         box
-          .moveTo(pad + 3, y + 11)
-          .lineTo(pad + 7, y + 15)
-          .lineTo(pad + 13, y + 7)
+          .moveTo(pad + 3, y + boxY + 7)
+          .lineTo(pad + 7, y + boxY + 11)
+          .lineTo(pad + 13, y + boxY + 3)
           .stroke({ width: 2, color: palette.ink });
       }
       container.addChild(box);
@@ -89,7 +98,7 @@ function buildSticky(container: Container, object: DeskObject, theme: ThemeToken
           .stroke({ width: 1.5, color: palette.ink, alpha: 0.7 });
         container.addChild(strike);
       }
-      y += 30;
+      y += CHECKLIST_ROW_H;
     }
   } else {
     const text = new Text({

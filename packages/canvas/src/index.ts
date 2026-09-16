@@ -9,5 +9,6 @@
 export * from './month-layout';
 export * from './viewport';
 export * from './spatial-index';
+export * from './sticky-layout';
 export * from './scene/scene-types';
 export * from './scene/scene-controller';

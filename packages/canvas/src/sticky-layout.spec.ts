@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { DeskObject } from '@infinite-desk/domain';
 
-import { CHECKLIST_ROW_H, STICKY_PAD, checklistItemAt } from './sticky-layout';
+import {
+  CHECKLIST_ROW_H,
+  STICKY_PAD,
+  STICKY_PAD_COMPACT,
+  checklistItemAt,
+} from './sticky-layout';
 
 /** A checklist sticky at (1000, 2000) with three items. */
 function checklistSticky(): DeskObject {
@@ -47,6 +52,19 @@ describe('checklistItemAt', () => {
       y: object.y + STICKY_PAD + 3 * CHECKLIST_ROW_H + 24,
     };
     expect(checklistItemAt(object, world)).toBeNull();
+  });
+
+  it('uses the compact padding for compact stickies', () => {
+    const object = checklistSticky();
+    const compact: DeskObject = {
+      ...object,
+      payload: { ...(object.payload as Extract<DeskObject['payload'], { kind: 'sticky' }>), compact: true },
+    };
+    const world = {
+      x: compact.x + STICKY_PAD_COMPACT + 7,
+      y: compact.y + STICKY_PAD_COMPACT + CHECKLIST_ROW_H + 11,
+    };
+    expect(checklistItemAt(compact, world)).toBe(1);
   });
 
   it('returns null for text stickies and other object kinds', () => {

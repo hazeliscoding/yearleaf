@@ -44,7 +44,7 @@ multi-select, and sharper text rasterization at high zoom.
 ## Milestone 3 — Desktop shell and persistence (delivery steps 1 & 5)
 
 - [ ] Tauri 2 shell: window management, native dialogs, packaging for Windows/macOS/Linux
-- [ ] SQLite behind narrow Tauri commands (WAL enabled); decide the SQLite integration (open question in the ADR)
+- [ ] SQLite behind narrow Tauri commands (WAL enabled); integration decided: rusqlite + rusqlite_migration ([design record](docs/design-sqlite-persistence.md))
 - [ ] Schema v1: `desk`, `calendar`, `calendar_object`, `event`, `attachment`, `tag`, `setting` with versioned migrations
 - [ ] Reopen the last desk on launch; crash-safe write flushing
 - [ ] `SQLitePersistence` implementing the `@infinite-desk/persistence` contracts

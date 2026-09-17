@@ -254,6 +254,42 @@ function truncate(text: string, maxWidth: number, approxCharWidth: number): stri
   return text.length > maxChars ? `${text.slice(0, maxChars - 1)}…` : text;
 }
 
+/**
+ * Circular-arrow marker showing a chip belongs to a repeating series.
+ *
+ * Drawn rather than typeset: a glyph character would depend on font coverage,
+ * and the desk has already been bitten by missing glyphs rendering as tofu.
+ * Without this a series is indistinguishable from unrelated events sharing a
+ * name — which matters most right before someone edits one and changes them all.
+ */
+function drawRepeatMarker(
+  parent: Container,
+  x: number,
+  y: number,
+  size: number,
+  color: number,
+  alpha: number,
+): void {
+  const radius = size / 2;
+  const cx = x + radius;
+  const cy = y + radius;
+  const gapStart = -Math.PI / 3;
+  const marker = new Graphics();
+  marker
+    .arc(cx, cy, radius * 0.8, gapStart, Math.PI * 1.55)
+    .stroke({ width: 1.8, color, alpha, cap: 'round' });
+  // Arrowhead closing the loop, pointing along the arc at its open end.
+  const tipX = cx + Math.cos(gapStart) * radius * 0.8;
+  const tipY = cy + Math.sin(gapStart) * radius * 0.8;
+  const head = radius * 0.62;
+  marker
+    .moveTo(tipX + head * 0.1, tipY - head)
+    .lineTo(tipX + head, tipY + head * 0.15)
+    .lineTo(tipX - head * 0.65, tipY + head * 0.3)
+    .fill({ color, alpha });
+  parent.addChild(marker);
+}
+
 /** Draws one event chip (timed / all-day / tentative / completed). */
 function drawEventChip(
   parent: Container,
@@ -286,6 +322,10 @@ function drawEventChip(
   parent.addChild(chip);
 
   const ink = variant === 'allday' ? palette.ink : theme.inkPrimary;
+  // Trailing markers are reserved before the title is measured, so a long
+  // title truncates around them rather than running underneath.
+  const markerSize = 14;
+  const markerSpace = event.recurring ? markerSize + 6 : 0;
   let textX = x + 14;
   if (event.time) {
     const time = new Text({
@@ -298,7 +338,7 @@ function drawEventChip(
     textX += time.width + 10;
   }
   const title = new Text({
-    text: truncate(event.title, x + width - textX - 8, 10),
+    text: truncate(event.title, x + width - textX - 8 - markerSpace, 10),
     style: {
       fontFamily: theme.fontUI,
       fontSize: 20,
@@ -316,6 +356,17 @@ function drawEventChip(
       .lineTo(title.x + title.width, y + height / 2)
       .stroke({ width: 1.5, color: ink, alpha: 0.7 });
     parent.addChild(strike);
+  }
+
+  if (event.recurring) {
+    drawRepeatMarker(
+      parent,
+      x + width - markerSize - 8,
+      y + (height - markerSize) / 2,
+      markerSize,
+      ink,
+      alpha * 0.75,
+    );
   }
 
   if (showMeta && event.meta) {

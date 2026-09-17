@@ -68,7 +68,8 @@ import { SelectionStore } from '../state/selection-store';
             <db-inspector-row label="Title">
               <input
                 aria-label="Event title"
-                style="flex:1;min-width:0;height:26px;border:1px solid var(--border);border-radius:var(--radius-subtle);background:var(--surface-raised);padding:0 8px;font:13px var(--font-ui);color:var(--ink-primary)"
+                class="db-input"
+                style="flex:1;min-width:0"
                 [value]="eventTitle()"
                 (change)="renameEvent($any($event.target).value)"
               />
@@ -104,17 +105,13 @@ import { SelectionStore } from '../state/selection-store';
           </db-inspector-group>
           }
           @if (editsWholeSeries()) {
-            <div
-              style="padding:8px 12px;font:var(--text-caption);color:var(--ink-secondary);border-bottom:1px solid var(--divider)"
-            >
+            <div class="db-help" style="padding:0 12px 10px">
               This event repeats — changes here apply to every occurrence.
               Double-click one on the calendar to change only that date.
             </div>
           }
           @if (isOverride()) {
-            <div
-              style="padding:8px 12px;font:var(--text-caption);color:var(--ink-secondary);border-bottom:1px solid var(--divider)"
-            >
+            <div class="db-help" style="padding:0 12px 10px">
               This is one date of a repeating event; changes here affect only it.
             </div>
           }
@@ -127,7 +124,8 @@ import { SelectionStore } from '../state/selection-store';
             <db-inspector-row label="Caption">
               <input
                 aria-label="Caption"
-                style="flex:1;min-width:0;height:26px;border:1px solid var(--border);border-radius:var(--radius-subtle);background:var(--surface-raised);padding:0 8px;font:13px var(--font-ui);color:var(--ink-primary)"
+                class="db-input"
+                style="flex:1;min-width:0"
                 [value]="imageCaption()"
                 (change)="recaptionImage($any($event.target).value)"
               />

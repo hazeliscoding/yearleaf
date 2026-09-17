@@ -73,7 +73,10 @@ multi-select, and sharper text rasterization at high zoom.
 - [x] Event persistence: typed `load_events`/`save_event`/`delete_event` commands (migration 3 adds `placed`, the flag that says whether an event owns its position), the `DeskPersistence` contract, and both adapters
 - [x] Event creation in the app: the Event tool and "New event" button create an event on the clicked day and title it in place; computed occurrences replace the sample event constants, and the sample month is seeded as real editable rows
 - [x] Events are undoable like the rest of the desk (add/rename/delete as commands; deleting a series restores its overrides on undo), and cancelling one date of a series materialises a tombstone
-- [ ] Materialise an override when a computed occurrence is *moved or edited* (cancelling already does) — needs the "this occurrence / this and following / all" choice from the design record, which has no UI yet
+- [x] Materialise an override when a computed occurrence is edited or cancelled — double-clicking one makes it real first, so the change lands on that date alone; the inspector edits the series and says which it is doing
+- [ ] "This and following" — the third scope from the design record (an `UNTIL` split plus migrating overrides across the boundary). "This occurrence" and "all" are covered by the gesture and the inspector respectively
+- [ ] Moving a computed occurrence off its day cell should materialise it too (editing and cancelling already do); needs the drag path to recognise event chips
+- [ ] Finish-gate items on the event chrome: the title editor's position, type size and fill are hardcoded constants that disagree with `drawEventChip`, so text shifts on commit; the editor always opens on the day's first chip row, hiding whatever is already there; the inspector's "Time" row is still a dead value
 - [x] Recurrence UI: the inspector's Repeats control creates or clears a series (Never/Daily/Weekly/Monthly/Yearly, anchored on the event's own date); richer rules show as "Custom" rather than being silently simplified. Title and colour edits finally persist
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums

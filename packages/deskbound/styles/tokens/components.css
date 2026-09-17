@@ -78,14 +78,17 @@
 .db-irow>label{font:var(--text-caption);color:var(--ink-secondary)}
 .db-input,.db-select select,.db-numfield input{height:var(--control-h-sm);font:var(--text-body-small);font-family:var(--font-ui);color:var(--ink-primary);background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-subtle);padding:0 8px;box-sizing:border-box;width:100%;transition:border-color var(--motion-fast) var(--ease-out)}
 .db-input:hover,.db-select select:hover{border-color:var(--border-strong)}
-.db-input:focus{outline:none;border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
+/* Fields share the base and hover rules, so they share the focus ring too —
+   otherwise a select keeps the global 2px offset halo that no other field in
+   the same panel wears. */
+.db-input:focus,.db-select select:focus{outline:none;border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
 .db-input::placeholder{color:var(--ink-muted)}
 .db-input[data-invalid="true"]{border-color:var(--danger)}
 .db-input:disabled{background:var(--surface-paper);color:var(--ink-disabled)}
 textarea.db-input{height:auto;min-height:56px;padding:6px 8px;resize:vertical}
 .db-field{display:flex;flex-direction:column;gap:4px}
 .db-field>label{font:var(--text-ui-label);color:var(--ink-secondary)}
-.db-field .db-help{font:var(--text-caption);color:var(--ink-muted)}
+.db-help{font:var(--text-caption);color:var(--ink-muted)}
 .db-field .db-help[data-invalid="true"]{color:var(--danger)}
 .db-search{position:relative;display:flex;align-items:center}
 /* The glyph overlays the input, so whichever element *wraps* it must leave the

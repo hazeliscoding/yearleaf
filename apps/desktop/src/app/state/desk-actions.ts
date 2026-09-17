@@ -26,49 +26,98 @@ export class DeskActions {
   private readonly history = inject(HistoryStore);
   private readonly selection = inject(SelectionStore);
 
-  /** Adds a new handwritten sticky note near a world position; selects it. */
-  addSticky(near: { x: number; y: number }): string {
-    const count = this.desk.floats().length;
-    const object: DeskObject = {
-      id: `new${Date.now()}`,
-      x: near.x + (count % 3) * 30,
-      y: near.y + (count % 3) * 24,
-      width: 260,
-      height: 180,
+  /**
+   * Adds a handwritten sticky note and selects it.
+   *
+   * @param at - World point the note is centred on. A note is placed like
+   *   paper under a thumb; anchoring a corner here would push the note off
+   *   the day the user aimed at.
+   * @param fanOut - Offsets each successive note so notes created without a
+   *   pointer (the palette) do not stack exactly.
+   */
+  addSticky(at: { x: number; y: number }, fanOut = false): string {
+    const width = 260;
+    const height = 180;
+    const step = fanOut ? this.desk.floats().length % 3 : 0;
+    return this.addObject({
+      x: Math.round(at.x - width / 2) + step * 30,
+      y: Math.round(at.y - height / 2) + step * 24,
+      width,
+      height,
       rotation: -1 + Math.random() * 2,
-      payload: { kind: 'sticky', text: 'new note', color: 'yellow', hand: true },
-    };
-    this.history.execute(new AddObjectCommand(this.desk, object));
-    this.selection.select('sticky', object.id);
-    return object.id;
+      // Starts empty: placeholder words are real content, so they survive a
+      // double-click (which selects one word) and weld themselves onto what
+      // the user types — "Maple Lodge" becomes "Maple Lodgenote".
+      payload: { kind: 'sticky', text: '', color: 'yellow', hand: true },
+    });
   }
 
-  /** Creates a draft text object at a world position (double-click to write). */
-  addDraftText(x: number, y: number): string {
-    const object: DeskObject = {
-      id: `txt${Date.now()}`,
-      x,
-      y,
+  /**
+   * Adds a checklist sticky — the only path to the tickable notes the desk
+   * could previously only be seeded with.
+   *
+   * @param at - World point the note is centred on.
+   */
+  addChecklistSticky(at: { x: number; y: number }): string {
+    const width = 260;
+    const height = 150;
+    return this.addObject({
+      x: Math.round(at.x - width / 2),
+      y: Math.round(at.y - height / 2),
+      width,
+      height,
+      rotation: -1 + Math.random() * 2,
+      payload: {
+        kind: 'sticky',
+        text: '',
+        color: 'mint',
+        // Empty for the same reason as addSticky's text.
+        items: [{ label: '' }],
+      },
+    });
+  }
+
+  /**
+   * Adds a text object holding already-composed content.
+   *
+   * @param at - World position of the text's top-left corner.
+   * @param text - Non-empty content; callers discard empty compositions
+   *   rather than creating an invisible object.
+   */
+  addText(at: { x: number; y: number }, text: string): string {
+    return this.addObject({
+      x: at.x,
+      y: at.y,
       width: 420,
       height: 90,
       rotation: 0,
-      payload: { kind: 'text', text: 'start typing…', draft: true },
-    };
-    this.history.execute(new AddObjectCommand(this.desk, object));
-    this.selection.select('text', object.id);
-    return object.id;
+      payload: { kind: 'text', text },
+    });
   }
 
-  /** Commits an edited text object's content and ends its draft state. */
+  /** Monotonic suffix so objects created in the same millisecond differ. */
+  private seq = 0;
+
+  /** Executes an add command for a fully specified object and selects it. */
+  private addObject(object: Omit<DeskObject, 'id'>): string {
+    const kind = object.payload.kind;
+    const id = `${kind}${Date.now()}-${this.seq++}`;
+    this.history.execute(new AddObjectCommand(this.desk, { ...object, id }));
+    this.selection.select(kind, id);
+    return id;
+  }
+
+  /** Commits an edited text object; clearing it removes the object. */
   commitTextEdit(id: string, text: string): void {
     const object = this.desk.get(id);
     if (!object || object.payload.kind !== 'text') return;
+    const trimmed = text.trim();
+    if (!trimmed) {
+      this.deleteObject(id);
+      return;
+    }
     this.history.execute(
-      new UpdatePayloadCommand(this.desk, id, object.payload, {
-        kind: 'text',
-        text: text.trim() || 'start typing…',
-        draft: false,
-      }),
+      new UpdatePayloadCommand(this.desk, id, object.payload, { kind: 'text', text: trimmed }),
     );
   }
 

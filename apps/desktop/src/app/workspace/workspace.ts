@@ -91,6 +91,7 @@ const HANDLE_RADIUS = 16;
     @if (editor(); as edit) {
       <textarea
         #editArea
+        autofocus
         aria-label="Edit text"
         [value]="edit.text"
         (blur)="commitEditor($event)"
@@ -147,7 +148,16 @@ export class Workspace {
 
   /** Object id currently edited through the DOM overlay, if any. */
   protected readonly editingId = signal<string | null>(null);
-  /** Select-all on focus (used for freshly created draft text). */
+  /**
+   * World position of a text object being composed that does not exist yet.
+   *
+   * Writing on empty paper opens the editor over bare canvas and only creates
+   * an object once the text is committed non-empty, so an abandoned
+   * composition leaves nothing behind — an empty text object would be an
+   * invisible scrap sitting on the desk.
+   */
+  private readonly pendingText = signal<Point | null>(null);
+  /** Select-all on focus (used for freshly created objects). */
   private selectAllOnFocus = false;
 
   private drag: DragState | null = null;
@@ -157,6 +167,23 @@ export class Workspace {
 
   /** Screen-space geometry and styling of the DOM text editor. */
   protected readonly editor = computed(() => {
+    const pending = this.pendingText();
+    if (pending) {
+      const v = this.viewport.viewport();
+      return {
+        text: '',
+        left: v.panX + pending.x * v.zoom,
+        top: v.panY + pending.y * v.zoom,
+        width: 420 * v.zoom,
+        height: 90 * v.zoom,
+        fontSize: 30 * v.zoom,
+        lineHeight: 38 * v.zoom,
+        padding: 4 * v.zoom,
+        background: 'transparent',
+        color: 'var(--ink-primary)',
+        fontFamily: 'var(--font-hand)',
+      };
+    }
     const id = this.editingId();
     if (!id) return null;
     const object = this.desk.floats().find((f) => f.id === id);
@@ -213,6 +240,15 @@ export class Workspace {
     effect(() => {
       const date = this.desk.flashDate();
       if (this.sceneReady()) this.scene.setFlashDate(date);
+    });
+    // Focus the editor the moment it exists. A timer would race a fast
+    // typist, and every keystroke that lands before focus is swallowed by
+    // the global shortcuts instead of the note.
+    effect(() => {
+      const area = this.editArea()?.nativeElement;
+      if (!area) return;
+      area.focus();
+      if (this.selectAllOnFocus) area.select();
     });
 
     this.destroyRef.onDestroy(() => this.scene.destroy());
@@ -272,6 +308,7 @@ export class Workspace {
     if (event.button !== 0) return;
     const world = this.toWorld(event);
     const panAnywhere = this.tools.spaceHeld() || this.tools.active() === 'Pan';
+    if (!panAnywhere && this.createForActiveTool(world)) return;
     const hit = !panAnywhere && this.sceneReady() ? this.scene.hitTest(world) : null;
 
     if (hit?.kind === 'object') {
@@ -334,8 +371,7 @@ export class Workspace {
     }
     if (hit?.kind === 'event') return;
 
-    const id = this.actions.addDraftText(Math.round(world.x), Math.round(world.y));
-    this.openEditor(id, true);
+    this.openTextDraft(world);
   }
 
   /** Ctrl/⌘ + wheel zooms around the cursor; plain wheel pans. */
@@ -408,9 +444,19 @@ export class Workspace {
 
   /** Commits the DOM editor's content as one command and closes it. */
   protected commitEditor(event: FocusEvent): void {
+    const text = (event.target as HTMLTextAreaElement).value;
+    this.tools.editing.set(false);
+
+    const pending = this.pendingText();
+    if (pending) {
+      this.pendingText.set(null);
+      // Abandoned compositions create nothing at all.
+      if (text.trim()) this.actions.addText(pending, text.trim());
+      return;
+    }
+
     const id = this.editingId();
     if (!id) return;
-    const text = (event.target as HTMLTextAreaElement).value;
     const object = this.desk.get(id);
     if (object?.payload.kind === 'text') {
       this.actions.commitTextEdit(id, text);
@@ -428,17 +474,61 @@ export class Workspace {
     this.editingId.set(null);
   }
 
-  /** Opens the DOM editor over an object and focuses it. */
+  /** Opens the DOM editor over an existing object. */
   private openEditor(id: string, selectAll: boolean): void {
     this.selectAllOnFocus = selectAll;
     this.editingId.set(id);
-    setTimeout(() => {
-      const area = this.editArea()?.nativeElement;
-      if (!area) return;
-      area.focus();
-      if (this.selectAllOnFocus) area.select();
-    }, 30);
+    this.takeKeyboard();
   }
+
+  /** Opens the editor over empty paper to compose a new text object. */
+  private openTextDraft(world: Point): void {
+    this.selectAllOnFocus = false;
+    this.pendingText.set({ x: Math.round(world.x), y: Math.round(world.y) });
+    this.takeKeyboard();
+  }
+
+  /**
+   * Marks the editor as owning the keyboard.
+   *
+   * The textarea itself is focused by an effect once Angular renders it (plus
+   * `autofocus` as a belt-and-braces). Keys pressed in the frame before that
+   * lands are dropped, but this flag keeps them from reaching the global
+   * shortcuts, where they would arm tools and start pans mid-sentence.
+   */
+  private takeKeyboard(): void {
+    this.tools.editing.set(true);
+  }
+
+  /**
+   * Places the active tool's object at a world point and returns to Select,
+   * so a second click does not silently create a second object.
+   *
+   * @returns `true` when a creation tool handled the click; `false` when the
+   *   caller should treat it as selection or panning.
+   */
+  private createForActiveTool(world: Point): boolean {
+    if (!this.sceneReady()) return false;
+    const at = { x: Math.round(world.x), y: Math.round(world.y) };
+    switch (this.tools.active()) {
+      case 'Text':
+        this.openTextDraft(world);
+        break;
+      case 'Sticky note':
+        // Select-all so the first keystroke replaces the placeholder rather
+        // than appending to it.
+        this.openEditor(this.actions.addSticky(at), true);
+        break;
+      case 'Task':
+        this.openEditor(this.actions.addChecklistSticky(at), true);
+        break;
+      default:
+        return false;
+    }
+    this.tools.activate('Select');
+    return true;
+  }
+
 
   /** `true` when the pointer is within handle range of the SE corner. */
   private nearSoutheast(object: { x: number; y: number; width: number; height: number }, world: Point): boolean {

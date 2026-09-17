@@ -68,13 +68,17 @@ export interface FilePayload {
   meta: string;
 }
 
-/** Payload for a freeform text object written directly on the canvas. */
+/**
+ * Payload for a freeform text object written directly on the canvas.
+ *
+ * Text objects always carry content: an empty one would be invisible on the
+ * desk, so composition happens in the editor overlay and the object is only
+ * created once there is something to show.
+ */
 export interface TextPayload {
   readonly kind: 'text';
-  /** The text content. */
+  /** The text content; never empty. */
   text: string;
-  /** `true` while the object is a freshly created, still-editing draft. */
-  draft?: boolean;
 }
 
 /** Union of all typed object payloads. */

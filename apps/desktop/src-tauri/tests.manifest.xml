@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Application manifest for test executables.
+
+  Tauri's menu layer imports the Common Controls v6 APIs, and the loader only
+  binds those when the binary's manifest asks for version 6 of the assembly.
+  The app binary gets such a manifest from tauri-build; a `cargo test`
+  executable gets none, so without this it fails to start with
+  STATUS_ENTRYPOINT_NOT_FOUND before a single test runs. Wired up in build.rs.
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+</assembly>

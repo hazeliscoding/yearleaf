@@ -552,6 +552,14 @@ pub async fn delete_object(
   delete_object_impl(&conn, &desk_id, &object_id).map_err(|e| e.to_string())
 }
 
+/// Drives `import_attachment` across the real IPC boundary.
+///
+/// The unit tests below call `import_attachment_impl` directly, which leaves
+/// the part that actually carries risk unexercised: the raw request body and
+/// the headers holding the metadata. Tauri's mock runtime runs the genuine
+/// dispatch, including the capability ACL, so a header renamed on one side of
+/// the boundary or a permission left out of `capabilities/default.json` fails
+/// here rather than in the user's hands.
 #[cfg(test)]
 mod tests {
   use super::*;

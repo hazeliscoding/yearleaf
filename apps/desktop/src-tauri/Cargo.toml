@@ -23,3 +23,8 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 rusqlite_migration = "2.6"
 sha2 = "0.10"
 percent-encoding = "2.3"
+
+[dev-dependencies]
+# The mock runtime, so the IPC boundary itself can be driven in a test rather
+# than only the functions behind it.
+tauri = { version = "2.11.3", features = ["test"] }

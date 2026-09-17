@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main-window permissions: core defaults plus the three typed persistence commands. Nothing else crosses IPC (docs/design-sqlite-persistence.md).",
+  "description": "Main-window permissions: core defaults plus the typed desk, event and attachment commands. Nothing else crosses IPC (docs/design-sqlite-persistence.md).",
   "windows": ["main"],
   "permissions": [
     "core:default",

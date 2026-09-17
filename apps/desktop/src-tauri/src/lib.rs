@@ -1,5 +1,7 @@
-mod commands;
-mod db;
+// Public so `tests/ipc.rs` can drive the command surface across a real Tauri
+// IPC boundary rather than only calling the functions behind it.
+pub mod commands;
+pub mod db;
 
 use tauri::Manager;
 

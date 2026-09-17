@@ -7,7 +7,7 @@
  * concrete storage technology.
  */
 
-import type { DeskObject } from '@infinite-desk/domain';
+import type { DeskObject, EventRecord } from '@infinite-desk/domain';
 
 /** A saved desk: identity plus every object placed on it. */
 export interface DeskSnapshot {
@@ -34,6 +34,16 @@ export interface DeskPersistence {
   saveObject(deskId: string, object: DeskObject): Promise<void>;
   /** Removes one object from the desk. */
   deleteObject(deskId: string, objectId: string): Promise<void>;
+  /**
+   * Loads every stored event, including series heads and the overrides that
+   * replace individual occurrences. Occurrences themselves are computed by the
+   * domain rather than stored, so this list stays small.
+   */
+  loadEvents(deskId: string): Promise<readonly EventRecord[]>;
+  /** Creates or replaces one event and its recurrence rule. */
+  saveEvent(deskId: string, event: EventRecord): Promise<void>;
+  /** Removes one event; a series takes its rule and overrides with it. */
+  deleteEvent(deskId: string, eventId: string): Promise<void>;
 }
 
 /**
@@ -42,6 +52,7 @@ export interface DeskPersistence {
  */
 export class InMemoryDeskPersistence implements DeskPersistence {
   private readonly desks = new Map<string, Map<string, DeskObject>>();
+  private readonly events = new Map<string, Map<string, EventRecord>>();
 
   /**
    * Seeds a desk so `loadDesk` can return it.
@@ -70,5 +81,25 @@ export class InMemoryDeskPersistence implements DeskPersistence {
 
   async deleteObject(deskId: string, objectId: string): Promise<void> {
     this.desks.get(deskId)?.delete(objectId);
+  }
+
+  async loadEvents(deskId: string): Promise<readonly EventRecord[]> {
+    return [...(this.events.get(deskId)?.values() ?? [])];
+  }
+
+  async saveEvent(deskId: string, event: EventRecord): Promise<void> {
+    let events = this.events.get(deskId);
+    if (!events) this.events.set(deskId, (events = new Map()));
+    events.set(event.id, event);
+  }
+
+  async deleteEvent(deskId: string, eventId: string): Promise<void> {
+    const events = this.events.get(deskId);
+    if (!events) return;
+    events.delete(eventId);
+    // A series takes its overrides with it, matching the database cascade.
+    for (const [id, event] of events) {
+      if (event.seriesId === eventId) events.delete(id);
+    }
   }
 }

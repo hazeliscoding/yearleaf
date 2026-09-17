@@ -5,7 +5,14 @@ fn main() {
   // `allow-<command>` entry in a capability file.
   tauri_build::try_build(
     tauri_build::Attributes::new().app_manifest(
-      tauri_build::AppManifest::new().commands(&["load_desk", "save_object", "delete_object"]),
+      tauri_build::AppManifest::new().commands(&[
+        "load_desk",
+        "save_object",
+        "delete_object",
+        "load_events",
+        "save_event",
+        "delete_event",
+      ]),
     ),
   )
   .expect("failed to run tauri-build");

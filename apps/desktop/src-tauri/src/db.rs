@@ -81,12 +81,26 @@ CREATE TABLE recurrence_rule (
 ) STRICT;
 ";
 
+/// Whether an event owns its position.
+///
+/// The design record's rule is that an occurrence derives its position from
+/// its date until the user moves it. `calendar_object` always carries x/y, so
+/// the event needs to say which of the two it means: while `placed` is 0 the
+/// stored geometry is ignored and the event draws in its day cell.
+///
+/// A separate step rather than an edit to migration 2: that migration has
+/// already run against working databases, and the discipline that keeps
+/// upgrades predictable is worth more than a tidier history.
+const MIGRATION_3: &str = "
+ALTER TABLE event ADD COLUMN placed INTEGER NOT NULL DEFAULT 0;
+";
+
 /// The schema version this binary expects; equals the migration count below.
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 /// The ordered, forward-only migration list. Append; never edit a shipped step.
 pub fn migrations() -> Migrations<'static> {
-  Migrations::new(vec![M::up(MIGRATION_1), M::up(MIGRATION_2)])
+  Migrations::new(vec![M::up(MIGRATION_1), M::up(MIGRATION_2), M::up(MIGRATION_3)])
 }
 
 /// Applies the connection pragmas required by the design record.
@@ -158,6 +172,7 @@ pub mod tests {
     Migrations::new(vec![
       M::up(MIGRATION_1),
       M::up(MIGRATION_2),
+      M::up(MIGRATION_3),
       M::up("CREATE TABLE extra (id TEXT PRIMARY KEY) STRICT;"),
     ])
   }

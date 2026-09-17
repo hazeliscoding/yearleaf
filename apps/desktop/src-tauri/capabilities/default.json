@@ -7,6 +7,9 @@
     "core:default",
     "allow-load-desk",
     "allow-save-object",
-    "allow-delete-object"
+    "allow-delete-object",
+    "allow-load-events",
+    "allow-save-event",
+    "allow-delete-event"
   ]
 }

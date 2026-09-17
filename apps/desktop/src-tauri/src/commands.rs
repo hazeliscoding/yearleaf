@@ -46,8 +46,10 @@ fn load_desk_impl(conn: &Connection, desk_id: &str) -> rusqlite::Result<Option<D
   let Some(name) = name else { return Ok(None) };
 
   let mut stmt = conn.prepare(
+    // Events are objects too, but they carry their own typed row and load
+    // through load_events; returning them here would draw them twice.
     "SELECT id, x, y, width, height, rotation, payload
-     FROM calendar_object WHERE desk_id = ?1 ORDER BY rowid",
+     FROM calendar_object WHERE desk_id = ?1 AND kind <> 'event' ORDER BY rowid",
   )?;
   let objects = stmt
     .query_map([desk_id], |row| {
@@ -119,6 +121,200 @@ fn delete_object_impl(conn: &Connection, desk_id: &str, object_id: &str) -> rusq
     [desk_id, object_id],
   )?;
   Ok(())
+}
+
+/// Wire shape of an event; mirrors `EventRecord` in the domain package.
+///
+/// Geometry rides along because an event is a `calendar_object` too, but it is
+/// only meaningful while `placed` is true — otherwise the event draws in the
+/// day cell its `date` names.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventRecord {
+  pub id: String,
+  pub title: String,
+  pub time_label: Option<String>,
+  pub color: String,
+  pub variant: Option<String>,
+  /// Floating calendar date, `YYYY-MM-DD`. For a series this is the anchor.
+  pub date: String,
+  /// `RRULE` body when this event heads a series.
+  pub rrule: Option<String>,
+  /// The series this row overrides, set together with `occurrence_date`.
+  pub series_id: Option<String>,
+  pub occurrence_date: Option<String>,
+  /// Suppresses the occurrence rather than replacing it.
+  #[serde(default)]
+  pub deleted: bool,
+  /// `true` once the user has moved the event off its day cell.
+  #[serde(default)]
+  pub placed: bool,
+  #[serde(default)]
+  pub x: f64,
+  #[serde(default)]
+  pub y: f64,
+  pub width: f64,
+  pub height: f64,
+  #[serde(default)]
+  pub rotation: f64,
+}
+
+fn load_events_impl(conn: &Connection, desk_id: &str) -> rusqlite::Result<Vec<EventRecord>> {
+  let mut stmt = conn.prepare(
+    "SELECT e.id, e.title, e.time_label, e.color, e.variant, e.series_id,
+            e.occurrence_date, e.deleted, e.placed,
+            o.x, o.y, o.width, o.height, o.rotation,
+            r.rrule, r.dtstart
+     FROM event e
+     JOIN calendar_object o ON o.id = e.id
+     LEFT JOIN recurrence_rule r ON r.event_id = e.id
+     WHERE o.desk_id = ?1
+     ORDER BY o.rowid",
+  )?;
+  let events = stmt
+    .query_map([desk_id], |row| {
+      // A series anchors on its rule's dtstart; everything else on the date
+      // its object was filed under.
+      let dtstart: Option<String> = row.get(15)?;
+      let occurrence_date: Option<String> = row.get(6)?;
+      Ok(EventRecord {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        time_label: row.get(2)?,
+        color: row.get(3)?,
+        variant: row.get(4)?,
+        date: dtstart
+          .clone()
+          .or_else(|| occurrence_date.clone())
+          .unwrap_or_default(),
+        rrule: row.get(14)?,
+        series_id: row.get(5)?,
+        occurrence_date,
+        deleted: row.get::<_, i64>(7)? != 0,
+        placed: row.get::<_, i64>(8)? != 0,
+        x: row.get(9)?,
+        y: row.get(10)?,
+        width: row.get(11)?,
+        height: row.get(12)?,
+        rotation: row.get(13)?,
+      })
+    })?
+    .collect();
+  events
+}
+
+fn save_event_impl(conn: &mut Connection, desk_id: &str, event: &EventRecord) -> Result<(), String> {
+  if event.series_id.is_some() != event.occurrence_date.is_some() {
+    return Err("an override needs both a series and the date it overrides".into());
+  }
+  // Date the object is filed under: an override belongs to the date it
+  // replaces, a plain event or series anchor to its own date.
+  let filed_on = event.occurrence_date.clone().unwrap_or_else(|| event.date.clone());
+
+  let tx = conn.transaction().map_err(|e| e.to_string())?;
+  tx.execute(
+    "INSERT INTO desk (id, name) VALUES (?1, ?1) ON CONFLICT(id) DO NOTHING",
+    [desk_id],
+  )
+  .map_err(|e| e.to_string())?;
+  tx.execute(
+    "INSERT INTO calendar_object (id, desk_id, kind, x, y, width, height, rotation, payload)
+     VALUES (?1, ?2, 'event', ?3, ?4, ?5, ?6, ?7, ?8)
+     ON CONFLICT(id) DO UPDATE SET
+       x = excluded.x, y = excluded.y, width = excluded.width,
+       height = excluded.height, rotation = excluded.rotation,
+       payload = excluded.payload,
+       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+    rusqlite::params![
+      event.id,
+      desk_id,
+      event.x,
+      event.y,
+      event.width,
+      event.height,
+      event.rotation,
+      format!("{{\"kind\":\"event\",\"date\":\"{filed_on}\"}}"),
+    ],
+  )
+  .map_err(|e| e.to_string())?;
+  tx.execute(
+    "INSERT INTO event (id, title, time_label, color, variant, series_id,
+                        occurrence_date, deleted, placed)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title, time_label = excluded.time_label,
+       color = excluded.color, variant = excluded.variant,
+       series_id = excluded.series_id, occurrence_date = excluded.occurrence_date,
+       deleted = excluded.deleted, placed = excluded.placed,
+       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+    rusqlite::params![
+      event.id,
+      event.title,
+      event.time_label,
+      event.color,
+      // The column defaults to 'timed', but an explicit NULL would defeat it.
+      event.variant.as_deref().unwrap_or("timed"),
+      event.series_id,
+      event.occurrence_date,
+      event.deleted as i64,
+      event.placed as i64,
+    ],
+  )
+  .map_err(|e| e.to_string())?;
+
+  match &event.rrule {
+    Some(rrule) => tx
+      .execute(
+        "INSERT INTO recurrence_rule (id, event_id, rrule, dtstart) VALUES (?1, ?1, ?2, ?3)
+         ON CONFLICT(event_id) DO UPDATE SET rrule = excluded.rrule, dtstart = excluded.dtstart",
+        rusqlite::params![event.id, rrule, event.date],
+      )
+      .map_err(|e| e.to_string())?,
+    // Clearing a rule turns a series back into a single event.
+    None => tx
+      .execute("DELETE FROM recurrence_rule WHERE event_id = ?1", [&event.id])
+      .map_err(|e| e.to_string())?,
+  };
+
+  tx.commit().map_err(|e| e.to_string())
+}
+
+fn delete_event_impl(conn: &Connection, desk_id: &str, event_id: &str) -> rusqlite::Result<()> {
+  // The event row and any rule or overrides cascade from the object.
+  conn.execute(
+    "DELETE FROM calendar_object WHERE desk_id = ?1 AND id = ?2",
+    [desk_id, event_id],
+  )?;
+  Ok(())
+}
+
+/// Loads every stored event on the desk; occurrences are expanded client-side.
+#[tauri::command]
+pub async fn load_events(db: State<'_, Db>, desk_id: String) -> Result<Vec<EventRecord>, String> {
+  let conn = db.0.lock().map_err(|e| e.to_string())?;
+  load_events_impl(&conn, &desk_id).map_err(|e| e.to_string())
+}
+
+/// Creates or replaces one event, its object row, and its recurrence rule.
+#[tauri::command]
+pub async fn save_event(
+  db: State<'_, Db>,
+  desk_id: String,
+  event: EventRecord,
+) -> Result<(), String> {
+  let mut conn = db.0.lock().map_err(|e| e.to_string())?;
+  save_event_impl(&mut conn, &desk_id, &event)
+}
+
+/// Removes one event; a series takes its rule and overrides with it.
+#[tauri::command]
+pub async fn delete_event(
+  db: State<'_, Db>,
+  desk_id: String,
+  event_id: String,
+) -> Result<(), String> {
+  let conn = db.0.lock().map_err(|e| e.to_string())?;
+  delete_event_impl(&conn, &desk_id, &event_id).map_err(|e| e.to_string())
 }
 
 /// Loads a desk snapshot, or `null` when the desk does not exist.
@@ -205,6 +401,117 @@ mod tests {
     let mut object = sticky("a", 10.0);
     object.payload = json!({ "text": "no kind" });
     assert!(save_object_impl(&mut conn, "desk-1", &object).is_err());
+  }
+
+  fn event(id: &str, date: &str) -> EventRecord {
+    EventRecord {
+      id: id.to_owned(),
+      title: "Seminar".to_owned(),
+      time_label: Some("14:00".to_owned()),
+      color: "blue".to_owned(),
+      variant: None,
+      date: date.to_owned(),
+      rrule: None,
+      series_id: None,
+      occurrence_date: None,
+      deleted: false,
+      placed: false,
+      x: 0.0,
+      y: 0.0,
+      width: 200.0,
+      height: 24.0,
+      rotation: 0.0,
+    }
+  }
+
+  #[test]
+  fn events_roundtrip_with_their_rule() {
+    let mut conn = open_test_db();
+    let mut series = event("series", "2026-09-01");
+    series.rrule = Some("FREQ=WEEKLY;BYDAY=TU".to_owned());
+    save_event_impl(&mut conn, "desk-1", &series).expect("save series");
+
+    let loaded = load_events_impl(&conn, "desk-1").expect("load");
+    assert_eq!(loaded.len(), 1);
+    assert_eq!(loaded[0].rrule.as_deref(), Some("FREQ=WEEKLY;BYDAY=TU"));
+    // A series anchors on its rule's dtstart.
+    assert_eq!(loaded[0].date, "2026-09-01");
+    assert!(!loaded[0].placed);
+  }
+
+  #[test]
+  fn clearing_the_rule_turns_a_series_back_into_one_event() {
+    let mut conn = open_test_db();
+    let mut series = event("series", "2026-09-01");
+    series.rrule = Some("FREQ=WEEKLY;BYDAY=TU".to_owned());
+    save_event_impl(&mut conn, "desk-1", &series).expect("save series");
+
+    series.rrule = None;
+    save_event_impl(&mut conn, "desk-1", &series).expect("save without rule");
+
+    let rules: i64 = conn
+      .query_row("SELECT count(*) FROM recurrence_rule", [], |row| row.get(0))
+      .expect("count rules");
+    assert_eq!(rules, 0);
+    assert!(load_events_impl(&conn, "desk-1").expect("load")[0].rrule.is_none());
+  }
+
+  #[test]
+  fn an_override_records_the_date_it_replaces() {
+    let mut conn = open_test_db();
+    let mut series = event("series", "2026-09-01");
+    series.rrule = Some("FREQ=WEEKLY;BYDAY=TU".to_owned());
+    save_event_impl(&mut conn, "desk-1", &series).expect("save series");
+
+    let mut moved = event("moved", "2026-09-15");
+    moved.series_id = Some("series".to_owned());
+    moved.occurrence_date = Some("2026-09-15".to_owned());
+    moved.placed = true;
+    moved.x = 900.0;
+    moved.y = 400.0;
+    save_event_impl(&mut conn, "desk-1", &moved).expect("save override");
+
+    let loaded = load_events_impl(&conn, "desk-1").expect("load");
+    let override_row = loaded.iter().find(|e| e.id == "moved").expect("override present");
+    assert_eq!(override_row.series_id.as_deref(), Some("series"));
+    assert_eq!(override_row.occurrence_date.as_deref(), Some("2026-09-15"));
+    assert!(override_row.placed, "a moved occurrence owns its position");
+    assert_eq!(override_row.x, 900.0);
+  }
+
+  #[test]
+  fn save_rejects_half_an_override_key() {
+    let mut conn = open_test_db();
+    let mut half = event("half", "2026-09-15");
+    half.series_id = Some("series".to_owned());
+    assert!(save_event_impl(&mut conn, "desk-1", &half).is_err());
+  }
+
+  #[test]
+  fn deleting_a_series_removes_its_overrides() {
+    let mut conn = open_test_db();
+    let mut series = event("series", "2026-09-01");
+    series.rrule = Some("FREQ=WEEKLY;BYDAY=TU".to_owned());
+    save_event_impl(&mut conn, "desk-1", &series).expect("save series");
+    let mut moved = event("moved", "2026-09-15");
+    moved.series_id = Some("series".to_owned());
+    moved.occurrence_date = Some("2026-09-15".to_owned());
+    save_event_impl(&mut conn, "desk-1", &moved).expect("save override");
+
+    delete_event_impl(&conn, "desk-1", "series").expect("delete series");
+    assert!(load_events_impl(&conn, "desk-1").expect("load").is_empty());
+  }
+
+  #[test]
+  fn events_do_not_come_back_as_desk_objects() {
+    let mut conn = open_test_db();
+    save_object_impl(&mut conn, "desk-1", &sticky("a", 10.0)).expect("save sticky");
+    save_event_impl(&mut conn, "desk-1", &event("e", "2026-09-01")).expect("save event");
+
+    // Otherwise the desk would draw each event twice: once as a chip and once
+    // as a generic object.
+    let snapshot = load_desk_impl(&conn, "desk-1").expect("load").expect("desk");
+    assert_eq!(snapshot.objects.iter().map(|o| o.id.as_str()).collect::<Vec<_>>(), ["a"]);
   }
 
   #[test]

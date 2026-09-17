@@ -25,6 +25,9 @@ pub fn run() {
       commands::load_desk,
       commands::save_object,
       commands::delete_object,
+      commands::load_events,
+      commands::save_event,
+      commands::delete_event,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

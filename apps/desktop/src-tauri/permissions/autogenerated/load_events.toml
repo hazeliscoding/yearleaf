@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-events"
+description = "Enables the load_events command without any pre-configured scope."
+commands.allow = ["load_events"]
+
+[[permission]]
+identifier = "deny-load-events"
+description = "Denies the load_events command without any pre-configured scope."
+commands.deny = ["load_events"]

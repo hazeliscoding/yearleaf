@@ -38,6 +38,18 @@ export interface EventRecord {
   readonly occurrenceDate?: Date;
   /** Suppresses the occurrence instead of replacing it (an RFC 5545 EXDATE). */
   readonly deleted?: boolean;
+
+  // The object half. An event is a `calendar_object` like any other, but its
+  // position is derived from its date until the user moves it off the cell —
+  // so the geometry below only means anything once `placed` is true.
+
+  /** `true` once the user has moved this event off its day cell. */
+  readonly placed?: boolean;
+  readonly x?: number;
+  readonly y?: number;
+  readonly width?: number;
+  readonly height?: number;
+  readonly rotation?: number;
 }
 
 /** One occurrence to draw. */

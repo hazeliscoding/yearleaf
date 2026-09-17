@@ -32,8 +32,9 @@ export const TOOL_GROUPS: readonly (readonly ToolSpec[])[] = [
     { icon: 'hand', label: 'Pan', shortcut: 'H' },
     { icon: 'type', label: 'Text', shortcut: 'T' },
     { icon: 'sticky-note', label: 'Sticky note', shortcut: 'N' },
-    { icon: 'calendar-plus', label: 'Event', unavailable: true },
     { icon: 'square-check', label: 'Task', shortcut: 'K' },
+    // Last in the group so the tools that work stay contiguous.
+    { icon: 'calendar-plus', label: 'Event', unavailable: true },
   ],
   [
     { icon: 'pen-line', label: 'Pen', unavailable: true },

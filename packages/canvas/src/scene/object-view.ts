@@ -19,6 +19,13 @@ import {
 } from '../sticky-layout';
 import { mixColors, type ThemeTokens } from './theme';
 
+/**
+ * Opacity of an empty object's on-paper prompt. The design system asks for
+ * "quiet prompts on the paper itself" rather than blank surfaces, and the
+ * prompt must stay clearly lighter than real ink so it never reads as content.
+ */
+const PROMPT_ALPHA = 0.38;
+
 /** File-kind label and tint for the attachment chip's icon square. */
 const FILE_KINDS = {
   pdf: { label: 'PDF', c: 'red' },
@@ -83,14 +90,17 @@ function buildSticky(container: Container, object: DeskObject, theme: ThemeToken
           .stroke({ width: 2, color: palette.ink });
       }
       container.addChild(box);
+      const blank = item.label.length === 0;
       const label = new Text({
-        text: item.label,
+        // A quiet prompt on the paper, never payload — an empty row would
+        // otherwise be half a component: a tickbox labelling nothing.
+        text: blank ? 'Add a task' : item.label,
         style: { fontFamily: theme.fontUI, fontSize: 20, fill: palette.ink },
       });
       label.position.set(pad + 24, y);
-      label.alpha = item.done ? 0.55 : 1;
+      label.alpha = blank ? PROMPT_ALPHA : item.done ? 0.55 : 1;
       container.addChild(label);
-      if (item.done) {
+      if (item.done && !blank) {
         const strike = new Graphics();
         strike
           .moveTo(label.x, y + 12)
@@ -101,8 +111,9 @@ function buildSticky(container: Container, object: DeskObject, theme: ThemeToken
       y += CHECKLIST_ROW_H;
     }
   } else {
+    const blank = object.payload.text.length === 0;
     const text = new Text({
-      text: object.payload.text,
+      text: blank ? 'Double-click to write' : object.payload.text,
       style: {
         fontFamily: object.payload.hand ? theme.fontHand : theme.fontUI,
         fontSize: compact ? 22 : 26,
@@ -113,6 +124,7 @@ function buildSticky(container: Container, object: DeskObject, theme: ThemeToken
       },
     });
     text.position.set(pad, pad);
+    text.alpha = blank ? PROMPT_ALPHA : 1;
     container.addChild(text);
   }
 

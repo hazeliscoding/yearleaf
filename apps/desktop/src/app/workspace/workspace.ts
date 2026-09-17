@@ -93,6 +93,7 @@ const HANDLE_RADIUS = 16;
         #editArea
         autofocus
         aria-label="Edit text"
+        [placeholder]="edit.placeholder"
         [value]="edit.text"
         (blur)="commitEditor($event)"
         (keydown.escape)="$any($event.target).blur(); $event.stopPropagation()"
@@ -107,7 +108,7 @@ const HANDLE_RADIUS = 16;
         [style.background]="edit.background"
         [style.color]="edit.color"
         [style.font-family]="edit.fontFamily"
-        style="position:absolute;box-sizing:border-box;border:none;outline:1.5px dashed var(--selection);resize:none;overflow:hidden;border-radius:3px"
+        style="position:absolute;box-sizing:border-box;border:none;outline:1.5px dashed var(--selection);resize:none;overflow:hidden;border-radius:3px;z-index:var(--z-object-drag,100)"
       ></textarea>
     }
     <div style="position:absolute;left:20px;bottom:16px">
@@ -172,6 +173,7 @@ export class Workspace {
       const v = this.viewport.viewport();
       return {
         text: '',
+        placeholder: 'Write on the desk…',
         left: v.panX + pending.x * v.zoom,
         top: v.panY + pending.y * v.zoom,
         width: 420 * v.zoom,
@@ -203,6 +205,10 @@ export class Workspace {
         : object.payload.kind === 'sticky' || object.payload.kind === 'text'
           ? object.payload.text
           : '',
+      // A quiet prompt, per the design system's empty-state rule. It lives on
+      // the input, never in the payload, so it cannot be committed the way the
+      // old "new note" placeholder was.
+      placeholder: checklist ? 'One task per line' : sticky ? 'Write a note…' : 'Type here…',
       left: v.panX + object.x * v.zoom,
       top: v.panY + object.y * v.zoom,
       width: object.width * v.zoom,

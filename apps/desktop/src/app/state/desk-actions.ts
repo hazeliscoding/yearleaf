@@ -60,7 +60,8 @@ export class DeskActions {
    */
   addChecklistSticky(at: { x: number; y: number }): string {
     const width = 260;
-    const height = 150;
+    // Two rows' worth: room to grow without opening as mostly empty paper.
+    const height = 110;
     return this.addObject({
       x: Math.round(at.x - width / 2),
       y: Math.round(at.y - height / 2),

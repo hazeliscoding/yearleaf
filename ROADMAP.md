@@ -72,8 +72,9 @@ multi-select, and sharper text rasterization at high zoom.
 - [x] Migration 2: `event` + `recurrence_rule`, with the override key and one-override-per-date enforced by the database; an installed v1 desk upgrades with its objects intact
 - [x] Event persistence: typed `load_events`/`save_event`/`delete_event` commands (migration 3 adds `placed`, the flag that says whether an event owns its position), the `DeskPersistence` contract, and both adapters
 - [x] Event creation in the app: the Event tool and "New event" button create an event on the clicked day and title it in place; computed occurrences replace the sample event constants, and the sample month is seeded as real editable rows
-- [ ] Materialise an override when a *computed* occurrence is moved, edited or deleted — the store and schema already support it; what is missing is the gesture and the choice below
-- [ ] Recurrence UI: set and edit a rule from the inspector, and the "this occurrence / this and following / all" choice the design record specifies
+- [x] Events are undoable like the rest of the desk (add/rename/delete as commands; deleting a series restores its overrides on undo), and cancelling one date of a series materialises a tombstone
+- [ ] Materialise an override when a computed occurrence is *moved or edited* (cancelling already does) — needs the "this occurrence / this and following / all" choice from the design record, which has no UI yet
+- [ ] Recurrence UI: set and edit a rule from the inspector — a series can only be created through code today
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums
 

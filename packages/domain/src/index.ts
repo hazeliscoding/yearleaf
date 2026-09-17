@@ -5,6 +5,7 @@
  */
 
 export * from './calendar';
+export * from './recurrence';
 export * from './objects';
 export * from './commands';
 export * from './history';

@@ -1,6 +1,6 @@
 # Recurrence and Occurrences Design (Milestone 4)
 
-**Status:** Draft — proposed for review
+**Status:** Accepted for implementation
 **Date:** September 17, 2026
 **Scope:** Answers the architecture record's open question "How should recurring
 events relate to freely moved or annotated occurrences?", and with it the shape of
@@ -169,7 +169,9 @@ with image import, `tag` and `setting` with search and preferences). The alterna
 creating all seven now — means designing `event` before this record is accepted and
 `attachment` before the import flow exists, which is how speculative columns are born.
 
-This needs an explicit yes before migration 2 is written.
+**Accepted** on September 17, 2026: schema v1 grows one migration per feature.
+Milestone 3 delivered the migration machinery plus `desk` and `calendar_object`;
+`event` and `recurrence_rule` arrive here as migration 2.
 
 ## References
 

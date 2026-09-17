@@ -45,7 +45,7 @@ multi-select, and sharper text rasterization at high zoom.
 
 - [x] Tauri 2 shell: window management, capability ACL, dev/build wiring (native dialogs land with the features that need them; packaging moved to milestone 6)
 - [x] SQLite behind narrow Tauri commands (WAL enabled): rusqlite + rusqlite_migration ([design record](docs/design-sqlite-persistence.md)) — no SQL crosses IPC
-- [ ] Schema v1 scope — needs an explicit decision before migration 2 is written. Migration 1 shipped `desk` and `calendar_object`; the ADR defines schema v1 as seven tables. Recommendation in the [recurrence design record](docs/design-recurrence.md): restate this milestone as "migration machinery + `desk`/`calendar_object`" and ship each remaining table with the feature that needs it
+- [x] Schema foundation: versioned migration machinery plus `desk` and `calendar_object` (migration 1). Decided 2026-09-17 — schema v1 grows one migration per feature rather than landing all seven tables up front, so each table is designed alongside the flow that uses it
 - [x] Reopen the last desk on launch (single `default` desk for now); crash-safe flushing — one transaction per committed command, WAL replay on reopen
 - [x] `SQLitePersistence` implementing the `@infinite-desk/persistence` contracts, injected only under Tauri (in-memory fallback in the browser)
 
@@ -67,7 +67,7 @@ multi-select, and sharper text rasterization at high zoom.
 - [ ] Remaining chrome defects from the 2026-09-16 design review (design-system side): the palette's scrollable list bisects a row at the rounded bottom edge with no scroll affordance; the inspector's Opacity row overflows the 264px panel ("100%" clips) and Rotation renders a raw float (`-0.523620739956715`); the ⎋ keycap reads as a prohibition sign at 10.5px; the floating zoom control and layer panel use `--shadow-1` where the system's own floating recipe specifies `--shadow-2`
 - [ ] Remaining hardcoded alphas that were never re-based for dark (same class as the shadow fix): the tooltip keycap is white-on-cream and loses its edge entirely, inspector colour swatches lose their border on the dark panel, and the sticky fold/pin/tape fills in `objects.css` are unaudited
 - [ ] Decide whether overlays are truly modal: the palette and search scrims are `inset:0` inside the canvas cell, so the toolbar and tool rail stay fully lit and clickable behind an open overlay while the zoom control is dimmed — one rule either way, no seam at the chrome edge
-- [ ] Recurrence rules and their relationship to moved/annotated occurrences — designed, awaiting sign-off ([design record](docs/design-recurrence.md)): a series is stored once and its occurrences computed, materialising into real objects only when touched; position is derived from the date until the user moves it
+- [ ] Recurrence rules and their relationship to moved/annotated occurrences — [design record](docs/design-recurrence.md) accepted: a series is stored once and its occurrences computed, materialising into real objects only when touched; position is derived from the date until the user moves it
 - [ ] Event and task objects on migration 2 (`event` + `recurrence_rule`), once the recurrence record is accepted — unblocks Marcus's adoption blocker (a weekly seminar cannot be represented at all today) and the dead Event tool
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums

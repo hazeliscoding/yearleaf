@@ -447,9 +447,9 @@ Version 1 excludes:
 
 These decisions do not block the initial repository, but they require explicit answers before their related features are implemented:
 
-- Which SQLite integration provides the best Tauri security and migration workflow?
-- What world-coordinate scale and origin strategy prevent precision problems across many years?
-- How should recurring events relate to freely moved or annotated occurrences?
+- ~~Which SQLite integration provides the best Tauri security and migration workflow?~~ — answered in [design-sqlite-persistence.md](design-sqlite-persistence.md): rusqlite + rusqlite_migration behind typed Tauri commands.
+- ~~What world-coordinate scale and origin strategy prevent precision problems across many years?~~ — answered in [design-canvas-renderer.md](design-canvas-renderer.md): month-grid world layout on a 2020 epoch.
+- ~~How should recurring events relate to freely moved or annotated occurrences?~~ — answered in [design-recurrence.md](design-recurrence.md): occurrences are computed and materialise into real objects only when touched; position is derived from the date until moved.
 - Which drawing representation balances visual quality, editability, and database size?
 - What subset of content must have an accessible structured mirror?
 - What export format can restore a complete desk, including attachments and application version metadata?

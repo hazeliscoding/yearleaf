@@ -55,6 +55,14 @@ export interface ImagePayload {
   frame: 'borderless' | 'framed' | 'taped';
   /** Caption shown under the image. */
   caption: string;
+  /**
+   * The imported file backing this image.
+   *
+   * Bytes live in the desk's asset directory, never in the payload — the
+   * object only names the attachment, so a picture used twice is stored once.
+   * Absent for the sample desk's placeholder frames.
+   */
+  attachmentId?: string;
 }
 
 /** Payload for a file attachment chip. */

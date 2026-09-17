@@ -10,6 +10,8 @@
     "allow-delete-object",
     "allow-load-events",
     "allow-save-event",
-    "allow-delete-event"
+    "allow-delete-event",
+    "allow-import-attachment",
+    "allow-load-attachments"
   ]
 }

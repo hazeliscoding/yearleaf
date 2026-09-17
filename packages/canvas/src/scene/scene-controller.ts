@@ -8,7 +8,7 @@
  * `render()` per animation frame, so a static desk costs nothing.
  */
 
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, Texture } from 'pixi.js';
 
 import type { DeskObject } from '@infinite-desk/domain';
 
@@ -61,12 +61,18 @@ export class CalendarSceneController {
   private connectorLayer!: Container;
   private interactionLayer!: Graphics;
 
+  /** Bitmaps already loaded, keyed by attachment id. */
+  private readonly textures = new Map<string, Texture>();
+  /** Attachments whose load is in flight, so it is not started twice. */
+  private readonly loadingTextures = new Set<string>();
+
   private readonly monthEntries = new Map<string, MonthEntry>();
   private readonly objectViews = new Map<string, Container>();
   private readonly objects = new Map<string, DeskObject>();
   private readonly index = new SpatialIndex();
 
   private dayContent!: SceneInitOptions['dayContent'];
+  private imageSource: SceneInitOptions['imageSource'];
   private today!: Date;
   private selection: string | null = null;
   private editing: string | null = null;
@@ -87,6 +93,7 @@ export class CalendarSceneController {
    */
   async init(options: SceneInitOptions): Promise<void> {
     this.dayContent = options.dayContent;
+    this.imageSource = options.imageSource;
     this.today = options.today;
     this.viewSize = { width: options.width, height: options.height };
     this.theme = readThemeTokens();
@@ -210,7 +217,7 @@ export class CalendarSceneController {
       const previous = this.objects.get(object.id);
       if (previous !== object) {
         this.objectViews.get(object.id)?.destroy({ children: true });
-        const view = buildObjectView(object, this.theme);
+        const view = buildObjectView(object, this.theme, this.textureFor(object));
         view.visible = this.editing !== object.id;
         this.layerFor(object).addChild(view);
         this.objectViews.set(object.id, view);
@@ -248,6 +255,7 @@ export class CalendarSceneController {
       const rebuilt = buildObjectView(
         { ...object, x: effective.x, y: effective.y, width: effective.width, height: effective.height },
         this.theme,
+        this.textureFor(object),
       );
       rebuilt.visible = this.editing !== id;
       this.layerFor(object).addChild(rebuilt);
@@ -290,7 +298,7 @@ export class CalendarSceneController {
       const object = this.objects.get(id);
       if (!object) continue;
       view.destroy({ children: true });
-      const rebuilt = buildObjectView(object, this.theme);
+      const rebuilt = buildObjectView(object, this.theme, this.textureFor(object));
       rebuilt.visible = this.editing !== id;
       this.layerFor(object).addChild(rebuilt);
       this.objectViews.set(id, rebuilt);
@@ -320,6 +328,57 @@ export class CalendarSceneController {
   }
 
   // ---- Internals ---------------------------------------------------------
+
+  /**
+   * The bitmap for an image object, starting its load when first asked for.
+   *
+   * Views are built synchronously, so a picture that is not in memory yet
+   * draws as its empty frame and the view is rebuilt when the file arrives.
+   * PixiJS stays inside this package: the application supplies a URL, never a
+   * texture.
+   */
+  private textureFor(object: DeskObject): Texture | undefined {
+    if (object.payload.kind !== 'image') return undefined;
+    const attachmentId = object.payload.attachmentId;
+    if (!attachmentId) return undefined;
+
+    const loaded = this.textures.get(attachmentId);
+    if (loaded) return loaded;
+    if (this.loadingTextures.has(attachmentId)) return undefined;
+
+    const url = this.imageSource?.(attachmentId);
+    if (!url) return undefined;
+    this.loadingTextures.add(attachmentId);
+    // Decoded here rather than through the asset loader, which picks a parser
+    // from the file extension: an imported picture is addressed by an object
+    // or asset URL that has none, and the loader then fails at decode time
+    // rather than saying it could not choose. Fetch and decode is explicit,
+    // and the same two calls work for both hosts.
+    void fetch(url)
+      .then((response) => response.blob())
+      .then((blob) => createImageBitmap(blob))
+      .then((bitmap) => {
+        this.textures.set(attachmentId, Texture.from(bitmap));
+        this.rebuildObjectsUsing(attachmentId);
+      })
+      .catch((error) => console.error(`could not load attachment ${attachmentId}`, error))
+      .finally(() => this.loadingTextures.delete(attachmentId));
+    return undefined;
+  }
+
+  /** Redraws the objects showing one attachment, once its bitmap is loaded. */
+  private rebuildObjectsUsing(attachmentId: string): void {
+    if (!this.app) return;
+    for (const [id, object] of this.objects) {
+      if (object.payload.kind !== 'image' || object.payload.attachmentId !== attachmentId) continue;
+      this.objectViews.get(id)?.destroy({ children: true });
+      const view = buildObjectView(object, this.theme, this.textures.get(attachmentId));
+      view.visible = this.editing !== id;
+      this.layerFor(object).addChild(view);
+      this.objectViews.set(id, view);
+    }
+    this.markDirty();
+  }
 
   /** Routes an object to its architecture layer. */
   private layerFor(object: DeskObject): Container {

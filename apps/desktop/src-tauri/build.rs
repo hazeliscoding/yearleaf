@@ -12,6 +12,8 @@ fn main() {
         "load_events",
         "save_event",
         "delete_event",
+        "import_attachment",
+        "load_attachments",
       ]),
     ),
   )

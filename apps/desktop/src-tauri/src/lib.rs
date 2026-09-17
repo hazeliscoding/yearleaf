@@ -19,6 +19,12 @@ pub fn run() {
       std::fs::create_dir_all(&data_dir)?;
       let conn = db::open(&data_dir.join("infinite-desk.db"))?;
       app.manage(commands::Db(std::sync::Mutex::new(conn)));
+
+      // Imported binaries sit beside the database, per the architecture
+      // record's desk layout, so a desk is one directory to copy or back up.
+      let assets = data_dir.join("assets");
+      std::fs::create_dir_all(&assets)?;
+      app.manage(commands::AssetRoot(assets));
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
@@ -28,6 +34,8 @@ pub fn run() {
       commands::load_events,
       commands::save_event,
       commands::delete_event,
+      commands::import_attachment,
+      commands::load_attachments,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

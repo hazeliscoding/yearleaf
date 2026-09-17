@@ -36,6 +36,7 @@ import { dateKey, type Occurrence } from '@infinite-desk/domain';
 import { DbLayerPanel, DbZoomControl } from '@infinite-desk/deskbound';
 
 import { sampleDayContent } from '../data/sample-desk';
+import { AttachmentStore } from '../persistence/attachments';
 import { DeskActions } from '../state/desk-actions';
 import { DeskStore } from '../state/desk-store';
 import { EventActions } from '../state/event-actions';
@@ -43,6 +44,16 @@ import { EventStore } from '../state/event-store';
 import { SelectionStore } from '../state/selection-store';
 import { ToolStore } from '../state/tool-store';
 import { ViewportStore } from '../state/viewport-store';
+
+/** Width divided by height of an image, or 1 when it cannot be measured. */
+async function aspectRatioOf(url: string): Promise<number> {
+  return new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve(probe.naturalWidth / (probe.naturalHeight || 1));
+    probe.onerror = () => resolve(1);
+    probe.src = url;
+  });
+}
 
 /** Transient state of an active object drag. */
 interface DragState {
@@ -78,6 +89,8 @@ const HANDLE_RADIUS = 16;
     '(pointerdown)': 'onPointerDown($event)',
     '(dblclick)': 'onDoubleClick($event)',
     '(wheel)': 'onWheel($event)',
+    '(dragover)': 'onDragOver($event)',
+    '(drop)': 'onDrop($event)',
     '(document:pointermove)': 'onPointerMove($event)',
     '(document:pointerup)': 'onPointerUp()',
   },
@@ -140,6 +153,7 @@ export class Workspace {
   protected readonly selection = inject(SelectionStore);
   private readonly actions = inject(DeskActions);
   private readonly eventActions = inject(EventActions);
+  private readonly attachments = inject(AttachmentStore);
   private readonly host = inject(ElementRef).nativeElement as HTMLElement;
   private readonly destroyRef = inject(DestroyRef);
 
@@ -331,6 +345,7 @@ export class Workspace {
         width,
         height,
         dayContent: (date) => this.dayContentFor(date),
+        imageSource: (attachmentId) => this.attachments.urlFor(attachmentId),
         today: new Date(),
       });
     } catch (error) {
@@ -484,6 +499,48 @@ export class Workspace {
     }
 
     this.openTextDraft(world);
+  }
+
+  /** Accepts dragged files so the browser does not navigate away to them. */
+  protected onDragOver(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }
+
+  /** Drops imported pictures onto the desk where they landed. */
+  protected onDrop(event: DragEvent): void {
+    const files = [...(event.dataTransfer?.files ?? [])].filter((file) =>
+      file.type.startsWith('image/'),
+    );
+    if (!files.length) return;
+    event.preventDefault();
+    const world = this.toWorld(event);
+    void this.importDroppedImages(files, world);
+  }
+
+  /**
+   * Imports each dropped picture and places it on the desk.
+   *
+   * Images are measured before placing so the frame matches the picture's
+   * shape from the first frame, rather than snapping when the bitmap loads.
+   * Each becomes its own undoable step, fanned out so a multi-file drop does
+   * not stack every picture on one spot.
+   */
+  private async importDroppedImages(files: readonly File[], at: Point): Promise<void> {
+    for (const [index, file] of files.entries()) {
+      try {
+        const attachment = await this.attachments.import(file);
+        const aspect = await aspectRatioOf(attachment.url);
+        this.actions.addImage(
+          { x: Math.round(at.x + index * 28), y: Math.round(at.y + index * 22) },
+          attachment.id,
+          aspect,
+        );
+      } catch (error) {
+        console.error(`could not import ${file.name}`, error);
+      }
+    }
   }
 
   /** Ctrl/⌘ + wheel zooms around the cursor; plain wheel pans. */

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-attachments"
+description = "Enables the load_attachments command without any pre-configured scope."
+commands.allow = ["load_attachments"]
+
+[[permission]]
+identifier = "deny-load-attachments"
+description = "Denies the load_attachments command without any pre-configured scope."
+commands.deny = ["load_attachments"]

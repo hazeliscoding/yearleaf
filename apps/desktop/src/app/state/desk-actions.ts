@@ -99,6 +99,27 @@ export class DeskActions {
   /** Monotonic suffix so objects created in the same millisecond differ. */
   private seq = 0;
 
+  /**
+   * Places an imported picture on the desk, centred on where it was dropped.
+   *
+   * @param at - World point the picture is centred on.
+   * @param attachmentId - The imported file it draws.
+   * @param aspect - Width divided by height, so a portrait photo is not
+   *   squeezed into a landscape frame before its bitmap has even loaded.
+   */
+  addImage(at: { x: number; y: number }, attachmentId: string, aspect: number): string {
+    const width = 320;
+    const height = Math.round(width / (aspect > 0 ? aspect : 1));
+    return this.addObject({
+      x: Math.round(at.x - width / 2),
+      y: Math.round(at.y - height / 2),
+      width,
+      height,
+      rotation: -1 + Math.random() * 2,
+      payload: { kind: 'image', frame: 'taped', caption: '', attachmentId },
+    });
+  }
+
   /** Executes an add command for a fully specified object and selects it. */
   private addObject(object: Omit<DeskObject, 'id'>): string {
     const kind = object.payload.kind;

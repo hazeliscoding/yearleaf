@@ -16,6 +16,9 @@ use tauri::State;
 /// Managed state holding the one writable connection to the desk database.
 pub struct Db(pub Mutex<Connection>);
 
+/// Managed state holding the directory imported binaries are copied into.
+pub struct AssetRoot(pub std::path::PathBuf);
+
 /// Wire shape of a desk object; mirrors `DeskObject` in the domain package.
 /// The payload stays opaque JSON here — the TypeScript domain validates it.
 #[derive(Debug, Serialize, Deserialize)]
@@ -317,6 +320,159 @@ pub async fn delete_event(
   delete_event_impl(&conn, &desk_id, &event_id).map_err(|e| e.to_string())
 }
 
+/// An imported binary, as the application sees it.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentRecord {
+  pub id: String,
+  pub file_name: String,
+  /// Path relative to the desk directory, for export and future sync.
+  pub relative_path: String,
+  pub media_type: String,
+  pub byte_size: i64,
+  pub checksum: String,
+  /// Absolute path, which the webview turns into an asset URL to display.
+  pub path: String,
+}
+
+/// Lowercase hex SHA-256 of the given bytes.
+fn checksum_of(bytes: &[u8]) -> String {
+  use sha2::{Digest, Sha256};
+  let mut hasher = Sha256::new();
+  hasher.update(bytes);
+  hasher.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Lowercase extension of a file name, or `"bin"` when it has none.
+fn extension_of(file_name: &str) -> String {
+  std::path::Path::new(file_name)
+    .extension()
+    .and_then(|e| e.to_str())
+    .map(|e| e.to_ascii_lowercase())
+    .filter(|e| e.chars().all(|c| c.is_ascii_alphanumeric()) && !e.is_empty())
+    .unwrap_or_else(|| "bin".to_owned())
+}
+
+fn import_attachment_impl(
+  conn: &Connection,
+  assets: &std::path::Path,
+  desk_id: &str,
+  file_name: &str,
+  media_type: &str,
+  bytes: &[u8],
+) -> Result<AttachmentRecord, String> {
+  if bytes.is_empty() {
+    return Err("refusing to import an empty file".into());
+  }
+  let checksum = checksum_of(bytes);
+  let stored_name = format!("{checksum}.{}", extension_of(file_name));
+  let relative_path = format!("assets/{stored_name}");
+  let absolute = assets.join(&stored_name);
+
+  // The checksum is the filename, so re-importing the same picture reuses the
+  // copy already on disk rather than writing it again.
+  if !absolute.exists() {
+    std::fs::create_dir_all(assets).map_err(|e| e.to_string())?;
+    std::fs::write(&absolute, bytes).map_err(|e| e.to_string())?;
+  }
+
+  conn
+    .execute(
+      "INSERT OR IGNORE INTO desk (id, name) VALUES (?1, ?1)",
+      [desk_id],
+    )
+    .map_err(|e| e.to_string())?;
+
+  let existing: Option<String> = conn
+    .query_row(
+      "SELECT id FROM attachment WHERE desk_id = ?1 AND checksum = ?2",
+      [desk_id, checksum.as_str()],
+      |row| row.get(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())?;
+
+  let id = match existing {
+    Some(id) => id,
+    None => {
+      let id = format!("att-{checksum}");
+      conn
+        .execute(
+          "INSERT INTO attachment (id, desk_id, file_name, relative_path, media_type, byte_size, checksum)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+          rusqlite::params![
+            id,
+            desk_id,
+            file_name,
+            relative_path,
+            media_type,
+            bytes.len() as i64,
+            checksum
+          ],
+        )
+        .map_err(|e| e.to_string())?;
+      id
+    }
+  };
+
+  Ok(AttachmentRecord {
+    id,
+    file_name: file_name.to_owned(),
+    relative_path,
+    media_type: media_type.to_owned(),
+    byte_size: bytes.len() as i64,
+    checksum,
+    path: absolute.to_string_lossy().into_owned(),
+  })
+}
+
+/// Copies an imported file into the desk's asset directory and records it.
+#[tauri::command]
+pub async fn import_attachment(
+  db: State<'_, Db>,
+  assets: State<'_, AssetRoot>,
+  desk_id: String,
+  file_name: String,
+  media_type: String,
+  bytes: Vec<u8>,
+) -> Result<AttachmentRecord, String> {
+  let conn = db.0.lock().map_err(|e| e.to_string())?;
+  import_attachment_impl(&conn, &assets.0, &desk_id, &file_name, &media_type, &bytes)
+}
+
+/// Every attachment on the desk, so stored image objects can find their bytes.
+#[tauri::command]
+pub async fn load_attachments(
+  db: State<'_, Db>,
+  assets: State<'_, AssetRoot>,
+  desk_id: String,
+) -> Result<Vec<AttachmentRecord>, String> {
+  let conn = db.0.lock().map_err(|e| e.to_string())?;
+  let mut stmt = conn
+    .prepare(
+      "SELECT id, file_name, relative_path, media_type, byte_size, checksum
+       FROM attachment WHERE desk_id = ?1 ORDER BY rowid",
+    )
+    .map_err(|e| e.to_string())?;
+  let rows = stmt
+    .query_map([desk_id.as_str()], |row| {
+      let relative_path: String = row.get(2)?;
+      let stored = relative_path.rsplit('/').next().unwrap_or_default().to_owned();
+      Ok(AttachmentRecord {
+        id: row.get(0)?,
+        file_name: row.get(1)?,
+        relative_path,
+        media_type: row.get(3)?,
+        byte_size: row.get(4)?,
+        checksum: row.get(5)?,
+        path: assets.0.join(stored).to_string_lossy().into_owned(),
+      })
+    })
+    .map_err(|e| e.to_string())?
+    .collect::<rusqlite::Result<Vec<_>>>();
+  rows.map_err(|e| e.to_string())
+}
+
 /// Loads a desk snapshot, or `null` when the desk does not exist.
 #[tauri::command]
 pub async fn load_desk(db: State<'_, Db>, desk_id: String) -> Result<Option<DeskSnapshot>, String> {
@@ -500,6 +656,81 @@ mod tests {
 
     delete_event_impl(&conn, "desk-1", "series").expect("delete series");
     assert!(load_events_impl(&conn, "desk-1").expect("load").is_empty());
+  }
+
+  /// Fresh, empty asset directory for one import test.
+  fn temp_assets(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("yearleaf-assets-{}-{tag}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    dir
+  }
+
+  #[test]
+  fn importing_writes_the_bytes_and_records_them() {
+    let conn = open_test_db();
+    let assets = temp_assets("write");
+    let record =
+      import_attachment_impl(&conn, &assets, "desk-1", "moodboard.PNG", "image/png", b"pretend png")
+        .expect("import");
+
+    assert_eq!(record.byte_size, 11);
+    assert_eq!(record.file_name, "moodboard.PNG");
+    // Stored under its checksum, with a normalised extension.
+    assert!(record.relative_path.starts_with("assets/"));
+    assert!(record.relative_path.ends_with(".png"));
+    assert_eq!(std::fs::read(&record.path).expect("file on disk"), b"pretend png");
+    let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn importing_the_same_bytes_twice_reuses_one_copy() {
+    let conn = open_test_db();
+    let assets = temp_assets("dedupe");
+    let first = import_attachment_impl(&conn, &assets, "desk-1", "a.png", "image/png", b"same bytes")
+      .expect("first");
+    // A different name, the same picture: one file and one row.
+    let second =
+      import_attachment_impl(&conn, &assets, "desk-1", "copy-of-a.png", "image/png", b"same bytes")
+        .expect("second");
+
+    assert_eq!(first.id, second.id);
+    assert_eq!(first.checksum, second.checksum);
+    let files = std::fs::read_dir(&assets).expect("dir").count();
+    let rows: i64 = conn
+      .query_row("SELECT count(*) FROM attachment", [], |row| row.get(0))
+      .expect("count");
+    assert_eq!(files, 1);
+    assert_eq!(rows, 1);
+    let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn importing_refuses_an_empty_file() {
+    let conn = open_test_db();
+    let assets = temp_assets("empty");
+    assert!(import_attachment_impl(&conn, &assets, "desk-1", "x.png", "image/png", b"").is_err());
+    let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn a_hostile_file_name_cannot_escape_the_asset_directory() {
+    let conn = open_test_db();
+    let assets = temp_assets("escape");
+    let record = import_attachment_impl(
+      &conn,
+      &assets,
+      "desk-1",
+      "../../etc/passwd",
+      "image/png",
+      b"payload",
+    )
+    .expect("import");
+
+    // The stored name comes from the checksum, never from the supplied name.
+    let written = std::path::Path::new(&record.path);
+    assert_eq!(written.parent(), Some(assets.as_path()));
+    assert!(!record.relative_path.contains(".."));
+    let _ = std::fs::remove_dir_all(&assets);
   }
 
   #[test]

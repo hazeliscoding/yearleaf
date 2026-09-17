@@ -79,6 +79,13 @@ export interface SceneInitOptions {
   readonly height: number;
   /** Content source for day cells. */
   readonly dayContent: DayContentProvider;
+  /**
+   * Resolves an attachment id to a URL the renderer can load.
+   *
+   * Keeps file access out of the canvas package: on the desktop this is an
+   * asset URL for a file in the desk directory, in a browser an object URL.
+   */
+  readonly imageSource?: (attachmentId: string) => string | null;
   /** The date rendered with the today stamp. */
   readonly today: Date;
 }

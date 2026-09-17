@@ -7,7 +7,7 @@
  * `(x + width/2, y + height/2)`.
  */
 
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 
 import type { DeskObject } from '@infinite-desk/domain';
 
@@ -35,8 +35,18 @@ const FILE_KINDS = {
   file: { label: 'FILE', c: 'olive' },
 } as const;
 
-/** Builds the display container for a desk object, sized to the object. */
-export function buildObjectView(object: DeskObject, theme: ThemeTokens): Container {
+/**
+ * Builds the display container for a desk object, sized to the object.
+ *
+ * @param texture - Loaded bitmap for an image object. Absent while the file is
+ *   still loading, or when the object has no attachment, in which case the
+ *   frame draws empty and the view is rebuilt once the bitmap arrives.
+ */
+export function buildObjectView(
+  object: DeskObject,
+  theme: ThemeTokens,
+  texture?: Texture,
+): Container {
   const container = new Container();
   const { width, height } = object;
   container.pivot.set(width / 2, height / 2);
@@ -48,7 +58,7 @@ export function buildObjectView(object: DeskObject, theme: ThemeTokens): Contain
       buildSticky(container, object, theme);
       break;
     case 'image':
-      buildImage(container, object, theme);
+      buildImage(container, object, theme, texture);
       break;
     case 'file':
       buildFile(container, object, theme);
@@ -135,8 +145,13 @@ function buildSticky(container: Container, object: DeskObject, theme: ThemeToken
   }
 }
 
-/** Taped photo placeholder with caption. */
-function buildImage(container: Container, object: DeskObject, theme: ThemeTokens): void {
+/** Photo with caption: the imported bitmap when loaded, its frame otherwise. */
+function buildImage(
+  container: Container,
+  object: DeskObject,
+  theme: ThemeTokens,
+  texture?: Texture,
+): void {
   if (object.payload.kind !== 'image') return;
   const { width, height } = object;
   const captionH = object.payload.caption ? 28 : 0;
@@ -147,10 +162,30 @@ function buildImage(container: Container, object: DeskObject, theme: ThemeTokens
   photo
     .rect(0, 0, width, photoH)
     .fill(mixColors(theme.stationery.teal.soft, theme.stationery.blue.soft, 0.5));
-  if (object.payload.frame === 'framed') {
-    photo.rect(0, 0, width, photoH).stroke({ width: 8, color: theme.surfaceRaised, alignment: 1 });
-  }
   container.addChild(photo);
+
+  if (texture) {
+    // Fill the frame and crop the overflow, the way a photo sits in a mount,
+    // rather than letterboxing it onto the paper.
+    const sprite = new Sprite(texture);
+    const scale = Math.max(width / texture.width, photoH / texture.height);
+    sprite.scale.set(scale);
+    sprite.position.set(
+      (width - texture.width * scale) / 2,
+      (photoH - texture.height * scale) / 2,
+    );
+    const crop = new Graphics().rect(0, 0, width, photoH).fill(0xffffff);
+    container.addChild(crop, sprite);
+    sprite.mask = crop;
+  }
+
+  if (object.payload.frame === 'framed') {
+    // Its own graphic, drawn after the bitmap: the mount sits on top of the
+    // photo, and re-adding `photo` here would lift it over the sprite instead.
+    const mount = new Graphics();
+    mount.rect(0, 0, width, photoH).stroke({ width: 8, color: theme.surfaceRaised, alignment: 1 });
+    container.addChild(mount);
+  }
 
   if (object.payload.frame === 'taped') {
     const tape = new Graphics();

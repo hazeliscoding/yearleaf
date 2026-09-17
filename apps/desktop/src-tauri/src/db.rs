@@ -95,12 +95,39 @@ const MIGRATION_3: &str = "
 ALTER TABLE event ADD COLUMN placed INTEGER NOT NULL DEFAULT 0;
 ";
 
+/// Imported binaries, per the architecture record: bytes live in an
+/// application-managed asset directory and only their metadata is stored here.
+/// Keeping them out of the database makes import, export, backup and preview
+/// generation ordinary file operations.
+///
+/// `checksum` is both the identity and the filename, so importing the same
+/// picture twice costs one copy on disk.
+const MIGRATION_4: &str = "
+CREATE TABLE attachment (
+  id            TEXT PRIMARY KEY,
+  desk_id       TEXT NOT NULL REFERENCES desk(id) ON DELETE CASCADE,
+  file_name     TEXT NOT NULL,
+  relative_path TEXT NOT NULL,
+  media_type    TEXT NOT NULL,
+  byte_size     INTEGER NOT NULL,
+  checksum      TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+) STRICT;
+
+CREATE UNIQUE INDEX idx_attachment_checksum ON attachment(desk_id, checksum);
+";
+
 /// The schema version this binary expects; equals the migration count below.
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
 
 /// The ordered, forward-only migration list. Append; never edit a shipped step.
 pub fn migrations() -> Migrations<'static> {
-  Migrations::new(vec![M::up(MIGRATION_1), M::up(MIGRATION_2), M::up(MIGRATION_3)])
+  Migrations::new(vec![
+    M::up(MIGRATION_1),
+    M::up(MIGRATION_2),
+    M::up(MIGRATION_3),
+    M::up(MIGRATION_4),
+  ])
 }
 
 /// Applies the connection pragmas required by the design record.
@@ -173,6 +200,7 @@ pub mod tests {
       M::up(MIGRATION_1),
       M::up(MIGRATION_2),
       M::up(MIGRATION_3),
+      M::up(MIGRATION_4),
       M::up("CREATE TABLE extra (id TEXT PRIMARY KEY) STRICT;"),
     ])
   }
@@ -284,9 +312,11 @@ pub mod tests {
     assert_eq!(
       names,
       vec![
+        "attachment",
         "calendar_object",
         "desk",
         "event",
+        "idx_attachment_checksum",
         "idx_calendar_object_desk",
         "idx_event_occurrence",
         "recurrence_rule",

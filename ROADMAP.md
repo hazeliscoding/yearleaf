@@ -71,7 +71,8 @@ multi-select, and sharper text rasterization at high zoom.
 - [x] Recurrence engine in `@infinite-desk/domain`: the accepted `RRULE` subset parses, validates, round-trips and expands over floating dates; `occurrencesInWindow` resolves stored events into drawable occurrences, applying overrides and tombstones and preserving orphans
 - [x] Migration 2: `event` + `recurrence_rule`, with the override key and one-override-per-date enforced by the database; an installed v1 desk upgrades with its objects intact
 - [x] Event persistence: typed `load_events`/`save_event`/`delete_event` commands (migration 3 adds `placed`, the flag that says whether an event owns its position), the `DeskPersistence` contract, and both adapters
-- [ ] Event creation in the app: enable the Event tool and the "New event" button, draw computed occurrences in day cells (replacing today's sample `dayContent`), and materialise an override when one occurrence is moved, edited or deleted
+- [x] Event creation in the app: the Event tool and "New event" button create an event on the clicked day and title it in place; computed occurrences replace the sample event constants, and the sample month is seeded as real editable rows
+- [ ] Materialise an override when a *computed* occurrence is moved, edited or deleted — the store and schema already support it; what is missing is the gesture and the choice below
 - [ ] Recurrence UI: set and edit a rule from the inspector, and the "this occurrence / this and following / all" choice the design record specifies
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums

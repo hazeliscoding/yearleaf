@@ -68,7 +68,11 @@ multi-select, and sharper text rasterization at high zoom.
 - [ ] Remaining hardcoded alphas that were never re-based for dark (same class as the shadow fix): the tooltip keycap is white-on-cream and loses its edge entirely, inspector colour swatches lose their border on the dark panel, and the sticky fold/pin/tape fills in `objects.css` are unaudited
 - [ ] Decide whether overlays are truly modal: the palette and search scrims are `inset:0` inside the canvas cell, so the toolbar and tool rail stay fully lit and clickable behind an open overlay while the zoom control is dimmed — one rule either way, no seam at the chrome edge
 - [ ] Recurrence rules and their relationship to moved/annotated occurrences — [design record](docs/design-recurrence.md) accepted: a series is stored once and its occurrences computed, materialising into real objects only when touched; position is derived from the date until the user moves it
-- [ ] Event and task objects on migration 2 (`event` + `recurrence_rule`), once the recurrence record is accepted — unblocks Marcus's adoption blocker (a weekly seminar cannot be represented at all today) and the dead Event tool
+- [x] Recurrence engine in `@infinite-desk/domain`: the accepted `RRULE` subset parses, validates, round-trips and expands over floating dates; `occurrencesInWindow` resolves stored events into drawable occurrences, applying overrides and tombstones and preserving orphans
+- [x] Migration 2: `event` + `recurrence_rule`, with the override key and one-override-per-date enforced by the database; an installed v1 desk upgrades with its objects intact
+- [ ] Event persistence commands (`load_events`/`save_event`/`delete_event`) alongside the existing object commands, and the `SQLitePersistence` methods that reach them
+- [ ] Event creation in the app: enable the Event tool and the "New event" button, draw computed occurrences in day cells (replacing today's sample `dayContent`), and materialise an override when one occurrence is moved, edited or deleted
+- [ ] Recurrence UI: set and edit a rule from the inspector, and the "this occurrence / this and following / all" choice the design record specifies
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums
 

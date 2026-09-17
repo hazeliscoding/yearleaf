@@ -80,7 +80,9 @@ multi-select, and sharper text rasterization at high zoom.
 - [x] Recurrence UI: the inspector's Repeats control creates or clears a series (Never/Daily/Weekly/Monthly/Yearly, anchored on the event's own date); richer rules show as "Custom" rather than being silently simplified. Title and colour edits finally persist
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [x] Image import via drag and drop; attachments copied into the managed asset directory with checksums (migration 4), drawn as real bitmaps, deduplicated by content, and held in memory in the browser build
-- [ ] Attachment follow-ups: nothing reclaims an asset file when the last object using it is deleted, and imports cross IPC as a JSON byte array, which will not scale to large files
+- [ ] Attachment follow-ups from the 2026-09-17 reviews: nothing reclaims an asset file when the last object using it is deleted (sweep at open is the shape — history does not survive a restart, so nothing can resurrect an object); imports cross IPC as a JSON byte array, which freezes the UI well before any hard limit (pass the bytes as a raw invoke body instead); no preview downscaling, so an 8000px photo stays resident as a full-size GPU texture; object URLs are never revoked in the browser build, where imports are also silently session-only
+- [ ] Paste an image from the clipboard — drop is the only import path today, which is undiscoverable and unreachable without a pointer; it reuses the same import and place calls
+- [ ] Photo finish-gate leftovers: an imported picture never reserves a caption row while the sample always has one; there is no way to reframe a photo after resizing (cover crops); the layer panel's "Photos" row is struck through while imported photos are plainly visible
 
 ## Milestone 5 — Findability and safety (delivery step 8)
 

@@ -26,6 +26,9 @@ import { mixColors, type ThemeTokens } from './theme';
  */
 const PROMPT_ALPHA = 0.38;
 
+/** Height of the caption band under a photo, in world units. */
+export const IMAGE_CAPTION_HEIGHT = 28;
+
 /** File-kind label and tint for the attachment chip's icon square. */
 const FILE_KINDS = {
   pdf: { label: 'PDF', c: 'red' },
@@ -154,11 +157,15 @@ function buildImage(
 ): void {
   if (object.payload.kind !== 'image') return;
   const { width, height } = object;
-  const captionH = object.payload.caption ? 28 : 0;
+  const captionH = object.payload.caption ? IMAGE_CAPTION_HEIGHT : 0;
   const photoH = height - captionH;
 
   const photo = new Graphics();
-  photo.rect(2, 4, width, photoH).fill({ color: theme.shadowInk, alpha: 0.1 });
+  // Shadow on all sides, not only down-right: a print lifts off the desk, and
+  // the top and left edges otherwise meet the paper with nothing between them.
+  photo
+    .rect(-1, -1, width + 4, photoH + 5)
+    .fill({ color: theme.shadowInk, alpha: 0.13 });
   photo
     .rect(0, 0, width, photoH)
     .fill(mixColors(theme.stationery.teal.soft, theme.stationery.blue.soft, 0.5));
@@ -177,6 +184,23 @@ function buildImage(
     const crop = new Graphics().rect(0, 0, width, photoH).fill(0xffffff);
     container.addChild(crop, sprite);
     sprite.mask = crop;
+    // A thin mount edge, so a saturated photo has a border against the paper
+    // and against the dark desk, where the cast shadow cannot be seen.
+    const edge = new Graphics();
+    edge
+      .rect(0, 0, width, photoH)
+      .stroke({ width: 1.5, color: theme.divider, alignment: 1 });
+    container.addChild(edge);
+  } else if (object.payload.attachmentId) {
+    // Waiting on the file. Says so quietly, the way an empty note does, and
+    // distinguishes a loading photo from a frame that has no picture at all.
+    const waiting = new Text({
+      text: 'Loading picture…',
+      style: { fontFamily: theme.fontUI, fontSize: 16, fill: theme.inkPrimary },
+    });
+    waiting.position.set((width - waiting.width) / 2, photoH / 2 - 10);
+    waiting.alpha = PROMPT_ALPHA;
+    container.addChild(waiting);
   }
 
   if (object.payload.frame === 'framed') {
@@ -188,17 +212,31 @@ function buildImage(
   }
 
   if (object.payload.frame === 'taped') {
-    const tape = new Graphics();
-    tape.rect(-14, -8, 44, 18).fill({ color: 0xd6c586, alpha: 0.55 });
-    tape.rect(width - 30, -8, 44, 18).fill({ color: 0xd6c586, alpha: 0.55 });
-    tape.angle = 0;
-    container.addChild(tape);
+    // Two strips crossing the corners diagonally, each with its own rotation —
+    // one shared graphic can only carry one angle, which is why this used to
+    // read as a pair of stickers. Colour comes from the theme so it stays
+    // tape-coloured on the dark desk instead of going muddy.
+    for (const [centreX, angle] of [
+      [4, -40],
+      [width - 4, 40],
+    ] as const) {
+      const strip = new Graphics();
+      strip.rect(-17, -7, 34, 14).fill({ color: theme.stationery.yellow.fill, alpha: 0.55 });
+      strip.position.set(centreX, 2);
+      strip.angle = angle;
+      container.addChild(strip);
+    }
   }
 
   if (object.payload.caption) {
+    // On its own paper band under the print, and clearly smaller than a chip
+    // title — written on the mount rather than floating over the calendar.
+    const band = new Graphics();
+    band.rect(0, photoH, width, captionH).fill(theme.surfacePaper);
+    container.addChild(band);
     const caption = new Text({
       text: object.payload.caption,
-      style: { fontFamily: theme.fontUI, fontSize: 17, fill: theme.inkSecondary },
+      style: { fontFamily: theme.fontUI, fontSize: 15, fill: theme.inkMuted },
     });
     caption.position.set(width / 2 - caption.width / 2, photoH + 6);
     container.addChild(caption);

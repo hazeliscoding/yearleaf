@@ -136,12 +136,27 @@ test('dropping a picture is undoable', async ({ page }) => {
   expect((await floats(page)).length).toBe(before);
 });
 
-test('a non-image drop is ignored', async ({ page }) => {
+test('a non-image drop is ignored, and cancelled', async ({ page }) => {
   await openWorkspace(page);
   const before = (await floats(page)).length;
 
-  await dropFile(page, 'notes.txt', 'text/plain', '');
+  // Both halves matter. An uncancelled file drop is opened in place by the
+  // browser, and the desktop window has no address bar to come back from —
+  // dropping a PDF would replace the desk with the PDF.
+  const cancelled = await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['notes'], 'notes.txt', { type: 'text/plain' }));
+    const canvas = document.querySelector('[data-screen-label="Canvas"]')!;
+    const drop = new DragEvent('drop', {
+      dataTransfer: transfer,
+      bubbles: true,
+      cancelable: true,
+    });
+    canvas.dispatchEvent(drop);
+    return drop.defaultPrevented;
+  });
 
   await page.waitForTimeout(300);
+  expect(cancelled, 'the browser must not be left to open the file').toBe(true);
   expect((await floats(page)).length).toBe(before);
 });

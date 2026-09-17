@@ -11,4 +11,5 @@ export * from './viewport';
 export * from './spatial-index';
 export * from './sticky-layout';
 export * from './scene/scene-types';
+export { IMAGE_CAPTION_HEIGHT } from './scene/object-view';
 export * from './scene/scene-controller';

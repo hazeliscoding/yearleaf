@@ -45,16 +45,6 @@ import { SelectionStore } from '../state/selection-store';
 import { ToolStore } from '../state/tool-store';
 import { ViewportStore } from '../state/viewport-store';
 
-/** Width divided by height of an image, or 1 when it cannot be measured. */
-async function aspectRatioOf(url: string): Promise<number> {
-  return new Promise((resolve) => {
-    const probe = new Image();
-    probe.onload = () => resolve(probe.naturalWidth / (probe.naturalHeight || 1));
-    probe.onerror = () => resolve(1);
-    probe.src = url;
-  });
-}
-
 /** Transient state of an active object drag. */
 interface DragState {
   readonly id: string;
@@ -290,6 +280,13 @@ export class Workspace {
       const floats = this.desk.floats();
       if (this.sceneReady()) this.scene.setObjects(floats);
     });
+    // Redraw pictures when their files finish loading. Attachments and desk
+    // objects hydrate in parallel, so an image restored before its attachment
+    // arrives has no URL to resolve and would sit as an empty frame.
+    effect(() => {
+      this.attachments.byId();
+      if (this.sceneReady()) this.scene.refreshImages();
+    });
     effect(() => {
       const id = this.selection.selection()?.id ?? null;
       if (this.sceneReady()) this.scene.setSelection(id);
@@ -510,13 +507,16 @@ export class Workspace {
 
   /** Drops imported pictures onto the desk where they landed. */
   protected onDrop(event: DragEvent): void {
-    const files = [...(event.dataTransfer?.files ?? [])].filter((file) =>
-      file.type.startsWith('image/'),
-    );
-    if (!files.length) return;
+    const dropped = [...(event.dataTransfer?.files ?? [])];
+    if (!dropped.length) return;
+    // Cancel *every* file drop, not only the ones we accept. A browser opens
+    // an uncancelled drop in place, and this window has no address bar to come
+    // back from: dropping a PDF on the desk would replace the desk with it.
     event.preventDefault();
-    const world = this.toWorld(event);
-    void this.importDroppedImages(files, world);
+
+    const images = dropped.filter((file) => file.type.startsWith('image/'));
+    if (!images.length) return;
+    void this.importDroppedImages(images, this.toWorld(event));
   }
 
   /**
@@ -528,14 +528,35 @@ export class Workspace {
    * not stack every picture on one spot.
    */
   private async importDroppedImages(files: readonly File[], at: Point): Promise<void> {
+    // World units per screen pixel, so a dropped picture is about the same
+    // size on screen wherever the desk is zoomed. A fixed world width lands as
+    // a speck at the year tier.
+    // Hand-sized in world units at the month tier, where the desk normally
+    // sits, and grown only when zoomed further out — a fixed world size lands
+    // as a speck across a whole year, and compensating for zoom at every level
+    // makes a photo fill the screen when you are reading a single day.
+    const zoom = this.viewport.viewport().zoom;
+    const MONTH_TIER_ZOOM = 0.45;
+    const enlarge = Math.min(Math.max(MONTH_TIER_ZOOM / (zoom || MONTH_TIER_ZOOM), 1), 4);
+    const box = Math.round(320 * enlarge);
+    // Offset by a fraction of the placed size, so a handful of pictures reads
+    // as a pile rather than one picture with slivers behind it.
+    const step = Math.round(box * 0.16);
+
     for (const [index, file] of files.entries()) {
       try {
+        // Measured from the file itself: one decode, and no dependence on the
+        // attachment URL being readable yet.
+        const bitmap = await createImageBitmap(file);
+        const aspect = bitmap.width / (bitmap.height || 1);
+        bitmap.close();
+
         const attachment = await this.attachments.import(file);
-        const aspect = await aspectRatioOf(attachment.url);
         this.actions.addImage(
-          { x: Math.round(at.x + index * 28), y: Math.round(at.y + index * 22) },
+          { x: Math.round(at.x + index * step), y: Math.round(at.y + index * step * 0.8) },
           attachment.id,
           aspect,
+          box,
         );
       } catch (error) {
         console.error(`could not import ${file.name}`, error);

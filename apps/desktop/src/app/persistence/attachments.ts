@@ -35,8 +35,14 @@ interface AttachmentWire {
 
 @Injectable({ providedIn: 'root' })
 export class AttachmentStore {
-  /** Everything imported on this desk, by id. */
-  private readonly byId = signal<ReadonlyMap<string, Attachment>>(new Map());
+  /**
+   * Everything imported on this desk, by id.
+   *
+   * Readable so the workspace can redraw when imports arrive: attachments and
+   * desk objects load in parallel, and whichever loses the race would
+   * otherwise leave restored pictures as empty frames until they were touched.
+   */
+  readonly byId = signal<ReadonlyMap<string, Attachment>>(new Map());
 
   constructor() {
     void this.hydrate();

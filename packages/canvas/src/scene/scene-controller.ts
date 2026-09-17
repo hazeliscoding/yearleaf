@@ -161,6 +161,11 @@ export class CalendarSceneController {
     this.objectViews.clear();
     this.objects.clear();
     this.index.clear();
+    // Textures are created outside the renderer, so destroying the application
+    // does not release them; the GPU memory would outlive the scene.
+    for (const texture of this.textures.values()) texture.destroy(true);
+    this.textures.clear();
+    this.loadingTextures.clear();
   }
 
   /** Resizes the renderer to new CSS-pixel dimensions. */
@@ -198,6 +203,23 @@ export class CalendarSceneController {
     const first = EPOCH_YEAR + Math.floor(view.y / YEAR_STRIDE_Y);
     const last = EPOCH_YEAR + Math.floor((view.y + view.height) / YEAR_STRIDE_Y);
     return { from: new Date(first, 0, 1), to: new Date(last, 11, 31) };
+  }
+
+  /**
+   * Re-resolves image objects that have no bitmap yet.
+   *
+   * Called when more attachments become available: an image restored before
+   * its file was known has nothing to draw, and nothing else would ask again.
+   */
+  refreshImages(): void {
+    if (!this.app) return;
+    for (const object of this.objects.values()) {
+      if (object.payload.kind !== 'image') continue;
+      const attachmentId = object.payload.attachmentId;
+      if (!attachmentId || this.textures.has(attachmentId)) continue;
+      // Starts the load, which rebuilds the view when the bitmap arrives.
+      this.textureFor(object);
+    }
   }
 
   /** Rebuilds visible months so a changed day-content provider is re-read. */

@@ -364,6 +364,12 @@ fn import_attachment_impl(
   if bytes.is_empty() {
     return Err("refusing to import an empty file".into());
   }
+  // The only importer today is the picture drop, which filters by type in the
+  // webview. Checking again here keeps the rule on the trusted side of the
+  // boundary, and before anything is written.
+  if !media_type.starts_with("image/") {
+    return Err(format!("unsupported attachment type {media_type}"));
+  }
   let checksum = checksum_of(bytes);
   let stored_name = format!("{checksum}.{}", extension_of(file_name));
   let relative_path = format!("assets/{stored_name}");
@@ -395,7 +401,10 @@ fn import_attachment_impl(
   let id = match existing {
     Some(id) => id,
     None => {
-      let id = format!("att-{checksum}");
+      // Scoped to the desk, because the uniqueness it stands for is. Deriving
+      // the id from the checksum alone collides the moment a second desk
+      // imports the same picture, since the lookup above is per-desk.
+      let id = format!("att-{desk_id}-{checksum}");
       conn
         .execute(
           "INSERT INTO attachment (id, desk_id, file_name, relative_path, media_type, byte_size, checksum)
@@ -709,6 +718,35 @@ mod tests {
     let conn = open_test_db();
     let assets = temp_assets("empty");
     assert!(import_attachment_impl(&conn, &assets, "desk-1", "x.png", "image/png", b"").is_err());
+    let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn importing_refuses_a_non_image_without_writing_it() {
+    let conn = open_test_db();
+    let assets = temp_assets("wrong-type");
+    assert!(
+      import_attachment_impl(&conn, &assets, "desk-1", "notes.pdf", "application/pdf", b"%PDF")
+        .is_err()
+    );
+    // Nothing reaches the asset directory, which the webview can read.
+    assert!(!assets.exists() || std::fs::read_dir(&assets).expect("dir").count() == 0);
+    let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn attachment_ids_are_scoped_to_their_desk() {
+    let conn = open_test_db();
+    let assets = temp_assets("two-desks");
+    let first =
+      import_attachment_impl(&conn, &assets, "desk-1", "a.png", "image/png", b"shared").expect("a");
+    // The same picture on another desk is a separate row, so an id derived
+    // from the checksum alone would collide on the primary key.
+    let second =
+      import_attachment_impl(&conn, &assets, "desk-2", "a.png", "image/png", b"shared").expect("b");
+
+    assert_ne!(first.id, second.id);
+    assert_eq!(first.checksum, second.checksum);
     let _ = std::fs::remove_dir_all(&assets);
   }
 

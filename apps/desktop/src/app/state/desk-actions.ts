@@ -6,6 +6,7 @@
 
 import { Injectable, inject } from '@angular/core';
 
+import { IMAGE_CAPTION_HEIGHT } from '@infinite-desk/canvas';
 import {
   AddObjectCommand,
   DeleteObjectCommand,
@@ -106,16 +107,46 @@ export class DeskActions {
    * @param attachmentId - The imported file it draws.
    * @param aspect - Width divided by height, so a portrait photo is not
    *   squeezed into a landscape frame before its bitmap has even loaded.
+   * @param box - Longest side in world units; callers scale it by the current
+   *   zoom so a dropped picture is a similar size on screen at any tier.
    */
-  addImage(at: { x: number; y: number }, attachmentId: string, aspect: number): string {
-    const width = 320;
-    const height = Math.round(width / (aspect > 0 ? aspect : 1));
+  addImage(
+    at: { x: number; y: number },
+    attachmentId: string,
+    aspect: number,
+    box = 320,
+  ): string {
+    // Fitted, not pinned. Pinning one axis lets the aspect ratio decide
+    // physical size, so a phone photo arrives as a poster taller than a month
+    // and a panorama as a strip thinner than a sticky. The longest side is
+    // capped, then an extreme ratio is grown back until its short side is
+    // still legible — up to a hard ceiling, so nothing spans the desk.
+    const ratio = aspect > 0 ? aspect : 1;
+    let width = ratio >= 1 ? box : box * ratio;
+    let height = ratio >= 1 ? box / ratio : box;
+
+    const minShortSide = box * 0.28;
+    const shortest = Math.min(width, height);
+    if (shortest < minShortSide) {
+      const grow = minShortSide / shortest;
+      width *= grow;
+      height *= grow;
+    }
+    const longest = Math.max(width, height);
+    if (longest > box * 2) {
+      const shrink = (box * 2) / longest;
+      width *= shrink;
+      height *= shrink;
+    }
+    width = Math.round(width);
+    height = Math.round(height);
     return this.addObject({
       x: Math.round(at.x - width / 2),
       y: Math.round(at.y - height / 2),
       width,
       height,
-      rotation: -1 + Math.random() * 2,
+      // Enough tilt to read as set down by hand rather than pasted square.
+      rotation: -3.5 + Math.random() * 7,
       payload: { kind: 'image', frame: 'taped', caption: '', attachmentId },
     });
   }
@@ -220,10 +251,25 @@ export class DeskActions {
     );
   }
 
-  /** Recaptions an image (inspector caption field). */
+  /**
+   * Recaptions an image (inspector caption field).
+   *
+   * The frame grows to make room for the caption band rather than the photo
+   * shrinking into it — writing a label under a print must not crop the print.
+   */
   setImageCaption(id: string, caption: string): void {
     const object = this.desk.get(id);
     if (!object || object.payload.kind !== 'image') return;
+    const had = !!object.payload.caption;
+    const has = !!caption;
+    if (had !== has) {
+      this.history.execute(
+        new ResizeObjectCommand(this.desk, id, object, {
+          width: object.width,
+          height: object.height + (has ? IMAGE_CAPTION_HEIGHT : -IMAGE_CAPTION_HEIGHT),
+        }),
+      );
+    }
     this.history.execute(
       new UpdatePayloadCommand(this.desk, id, object.payload, { ...object.payload, caption }),
     );

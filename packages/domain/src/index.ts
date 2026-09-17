@@ -7,5 +7,6 @@
 export * from './calendar';
 export * from './recurrence';
 export * from './objects';
+export * from './events';
 export * from './commands';
 export * from './history';

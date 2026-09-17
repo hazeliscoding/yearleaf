@@ -20,8 +20,16 @@ import { ToolStore } from './state/tool-store';
 import { ViewportStore, type Tier } from './state/viewport-store';
 import { Workspace } from './workspace/workspace';
 
-/** Tool labels reachable through single-key shortcuts. */
-const TOOL_KEYS: Record<string, string> = { v: 'Select', h: 'Pan', t: 'Text', p: 'Pen' };
+/** Tool labels reachable through single-key shortcuts; mirrors the key hints
+ *  printed on the tool rail, so pressing a key and clicking its button agree.
+ *  Tools that are not built yet claim no key — see `ToolSpec.unavailable`. */
+const TOOL_KEYS: Record<string, string> = {
+  v: 'Select',
+  h: 'Pan',
+  t: 'Text',
+  n: 'Sticky note',
+  k: 'Task',
+};
 /** Arrow-key nudge distances in world units (plain / shift). */
 const NUDGE = 16;
 const NUDGE_LARGE = 64;
@@ -161,7 +169,7 @@ export class App {
         this.jumpToSeptemberDay(17);
         break;
       case 'New sticky note':
-        this.actions.addSticky(this.viewport.centerWorld());
+        this.actions.addSticky(this.viewport.centerWorld(), true);
         break;
       case 'Fit month':
         this.viewport.fitTier('Month');
@@ -176,7 +184,10 @@ export class App {
   protected onKeyDown(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
     const tag = (target.tagName || '').toLowerCase();
-    const typing = tag === 'input' || tag === 'textarea' || target.isContentEditable;
+    // `tools.editing()` covers the frame between an editor appearing and
+    // receiving focus, where the event target is still the document body.
+    const typing =
+      tag === 'input' || tag === 'textarea' || target.isContentEditable || this.tools.editing();
 
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();
@@ -220,8 +231,9 @@ export class App {
     }
 
     const key = event.key.toLowerCase();
-    if (key === 'n') {
-      this.actions.addSticky(this.viewport.centerWorld());
+    // The palette advertises ⇧T for Today, so the Text tool must not eat it.
+    if (key === 't' && event.shiftKey) {
+      this.goToday();
       return;
     }
     const tool = TOOL_KEYS[key];

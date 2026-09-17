@@ -57,7 +57,12 @@ import { ViewportStore, type Tier } from '../state/viewport-store';
       title="Toggle theme"
       (click)="toggleTheme.emit(); $event.stopPropagation()"
     ></button>
-    <button db-button variant="primary" icon="calendar-plus">New event</button>
+    <!-- Events need the event data model (gated on the ADR's recurrence
+         question). Disabled rather than inert: the most prominent button on
+         the screen silently doing nothing reads as a broken product. -->
+    <button db-button variant="primary" icon="calendar-plus" disabled title="Events are not available yet">
+      New event
+    </button>
   `,
 })
 export class Toolbar {

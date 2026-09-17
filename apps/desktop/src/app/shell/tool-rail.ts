@@ -24,9 +24,10 @@ import { TOOL_GROUPS, ToolStore } from '../state/tool-store';
       @for (tool of group; track tool.label) {
         <db-tool-button
           [icon]="tool.icon"
-          [label]="tool.label"
+          [label]="tool.unavailable ? tool.label + ' — not available yet' : tool.label"
           [shortcut]="tool.shortcut ?? null"
           [active]="tools.active() === tool.label"
+          [disabled]="!!tool.unavailable"
           (pressed)="tools.activate(tool.label)"
         />
       }

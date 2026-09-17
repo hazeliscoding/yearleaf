@@ -26,6 +26,46 @@ function checklistSticky(): DeskObject {
   };
 }
 
+describe('DeskActions object creation', () => {
+  let store: DeskStore;
+  let actions: DeskActions;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: DESK_PERSISTENCE, useValue: new InMemoryDeskPersistence() }],
+    });
+    store = TestBed.inject(DeskStore);
+    actions = TestBed.inject(DeskActions);
+  });
+
+  it('centres a sticky on the requested point', () => {
+    const id = actions.addSticky({ x: 400, y: 900 });
+    const note = store.get(id)!;
+    expect(note.x + note.width / 2).toBe(400);
+    expect(note.y + note.height / 2).toBe(900);
+  });
+
+  it('fans out only when asked, so pointerless notes do not stack', () => {
+    const xs = [0, 1, 2].map(() => store.get(actions.addSticky({ x: 400, y: 900 }, true))!.x);
+    expect(new Set(xs).size).toBe(3);
+  });
+
+  it('creates a checklist sticky with one unticked item', () => {
+    const id = actions.addChecklistSticky({ x: 0, y: 0 });
+    const payload = store.get(id)!.payload as StickyPayload;
+    expect(payload.items).toHaveLength(1);
+    expect(payload.items![0].done ?? false).toBe(false);
+  });
+
+  it('clearing a text object deletes it rather than leaving an empty scrap', () => {
+    const id = actions.addText({ x: 10, y: 10 }, 'fair setup');
+    expect(store.get(id)).toBeDefined();
+
+    actions.commitTextEdit(id, '   ');
+    expect(store.get(id)).toBeUndefined();
+  });
+});
+
 describe('DeskActions checklist editing', () => {
   let store: DeskStore;
   let actions: DeskActions;

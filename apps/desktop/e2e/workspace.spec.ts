@@ -83,15 +83,21 @@ test('scene fonts are fetched before first paint', async ({ page }) => {
   expect(await page.evaluate(() => document.fonts.check('16px "Hanken Grotesk"'))).toBe(true);
 });
 
-test('N creates a sticky and double-click edits it in place', async ({ page }) => {
+test('double-click edits an existing sticky in place', async ({ page }) => {
   await openWorkspace(page);
   const before = (await floats(page)).length;
 
+  // `n` arms the sticky tool (matching the rail's key hint); the click places
+  // the note. Placement itself is covered in creation.spec.ts.
   await page.keyboard.press('n');
+  const host = await page.locator('[data-screen-label="Canvas"]').boundingBox();
+  await page.mouse.click(host!.x + host!.width / 2, host!.y + host!.height / 2);
+  await page.keyboard.press('Escape');
+
   const created = (await floats(page)).at(-1);
   expect((await floats(page)).length).toBe(before + 1);
   expect(created?.payload.kind).toBe('sticky');
-  expect(created?.payload.text).toBe('new note');
+  expect(created?.payload.text).toBe('');
 
   const center = await screenPoint(
     page,
@@ -100,8 +106,8 @@ test('N creates a sticky and double-click edits it in place', async ({ page }) =
   );
   await page.mouse.dblclick(center.x, center.y);
   const editor = page.getByLabel('Edit text');
-  await expect(editor).toBeVisible();
-  await expect(editor).toHaveValue('new note');
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue('');
 
   await editor.fill('water the plants');
   await page.keyboard.press('Escape');

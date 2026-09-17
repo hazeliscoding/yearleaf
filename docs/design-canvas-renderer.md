@@ -133,8 +133,12 @@ and a southeast handle resizes stickies and images via `ResizeObjectCommand`.
 Double-clicking a text object **or a sticky note** opens a DOM editor positioned with
 `worldToScreen` over the object's rect, font-size multiplied by zoom, while the scene
 hides the object. Blur (or Escape) commits one `UpdatePayloadCommand` and the scene
-re-renders the saved value. Double-clicking empty paper creates a draft text object and
-opens the same editor. This closes milestone 1's "sticky notes aren't editable" gap.
+re-renders the saved value. This closes milestone 1's "sticky notes aren't editable" gap.
+
+Double-clicking empty paper (or clicking with the Text tool) opens the same editor over
+bare canvas, holding only a world position: the object is created on commit, and only if
+the text is non-empty, so an abandoned composition leaves nothing behind. Composition is
+therefore transient gesture state, and writing one note is exactly one undoable command.
 
 ## Navigation
 

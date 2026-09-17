@@ -21,12 +21,6 @@ export class SelectionStore {
   /** Active selection, or `null` when nothing is selected. */
   readonly selection = signal<Selection | null>(null);
 
-  /** Title of the selected event (inspector-editable). */
-  readonly eventTitle = signal('Dentist');
-  /** Time range copy of the selected event. */
-  readonly eventTime = signal('14:00 – 14:40');
-  /** Stationery custom property of the selected event's color. */
-  readonly eventColor = signal('--stationery-teal');
   /**
    * The selected event chip resolved to an occurrence.
    *

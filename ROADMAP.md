@@ -74,7 +74,7 @@ multi-select, and sharper text rasterization at high zoom.
 - [x] Event creation in the app: the Event tool and "New event" button create an event on the clicked day and title it in place; computed occurrences replace the sample event constants, and the sample month is seeded as real editable rows
 - [x] Events are undoable like the rest of the desk (add/rename/delete as commands; deleting a series restores its overrides on undo), and cancelling one date of a series materialises a tombstone
 - [ ] Materialise an override when a computed occurrence is *moved or edited* (cancelling already does) — needs the "this occurrence / this and following / all" choice from the design record, which has no UI yet
-- [ ] Recurrence UI: set and edit a rule from the inspector — a series can only be created through code today
+- [x] Recurrence UI: the inspector's Repeats control creates or clears a series (Never/Daily/Weekly/Monthly/Yearly, anchored on the event's own date); richer rules show as "Custom" rather than being silently simplified. Title and colour edits finally persist
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
 - [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums
 

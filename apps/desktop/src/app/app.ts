@@ -139,6 +139,14 @@ export class App {
               ? new Date(event['occurrenceDate'] as string)
               : undefined,
           }),
+        // The double-click path: materialise the selected occurrence, then
+        // rename the row that now stands for that date.
+        editSelectedOccurrence: (title: string) => {
+          const occurrence = this.selection.occurrence();
+          if (!occurrence) return false;
+          this.eventActions.setTitle(this.eventActions.materialise(occurrence), title);
+          return true;
+        },
         // Selects the chip belonging to one stored event, wherever it sits.
         selectEvent: (id: string) => {
           const event = this.events.get(id);
@@ -150,9 +158,6 @@ export class App {
           if (!found) return false;
           this.selection.select('event', found.id);
           this.selection.occurrence.set(found);
-          this.selection.eventTitle.set(found.event.title);
-          this.selection.eventTime.set(found.event.timeLabel ?? 'All day');
-          this.selection.eventColor.set(`--stationery-${found.event.color}`);
           return true;
         },
         // Selecting a chip by date rather than by pixel: the chip's position

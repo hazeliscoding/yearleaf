@@ -69,20 +69,20 @@ import { SelectionStore } from '../state/selection-store';
               <input
                 aria-label="Event title"
                 style="flex:1;min-width:0;height:26px;border:1px solid var(--border);border-radius:var(--radius-subtle);background:var(--surface-raised);padding:0 8px;font:13px var(--font-ui);color:var(--ink-primary)"
-                [value]="selection.eventTitle()"
-                (input)="selection.eventTitle.set($any($event.target).value)"
+                [value]="eventTitle()"
                 (change)="renameEvent($any($event.target).value)"
               />
             </db-inspector-row>
             <db-inspector-row label="Time">
               <span style="font:13px var(--font-ui);color:var(--ink-primary);font-variant-numeric:tabular-nums">{{
-                selection.eventTime()
+                eventTime()
               }}</span>
             </db-inspector-row>
             <db-inspector-row label="Color">
-              <db-color-picker [value]="selection.eventColor()" (valueChange)="recolorEvent($event)" />
+              <db-color-picker [value]="eventColor()" (valueChange)="recolorEvent($event)" />
             </db-inspector-row>
           </db-inspector-group>
+          @if (!isOverride()) {
           <db-inspector-group label="Schedule">
             <db-inspector-row label="Repeats">
               <!-- A dropdown rather than a segmented control: five options do
@@ -102,11 +102,20 @@ import { SelectionStore } from '../state/selection-store';
               </div>
             </db-inspector-row>
           </db-inspector-group>
+          }
           @if (editsWholeSeries()) {
             <div
               style="padding:8px 12px;font:var(--text-caption);color:var(--ink-secondary);border-bottom:1px solid var(--divider)"
             >
               This event repeats — changes here apply to every occurrence.
+              Double-click one on the calendar to change only that date.
+            </div>
+          }
+          @if (isOverride()) {
+            <div
+              style="padding:8px 12px;font:var(--text-caption);color:var(--ink-secondary);border-bottom:1px solid var(--divider)"
+            >
+              This is one date of a repeating event; changes here affect only it.
             </div>
           }
         }
@@ -177,6 +186,17 @@ export class Inspector {
 
   /** `true` when the selection belongs to a series, so edits reach them all. */
   protected readonly editsWholeSeries = computed(() => !!this.selectedEvent()?.rrule);
+
+  /** `true` when the selection is one materialised date of a series. */
+  protected readonly isOverride = computed(() => !!this.selectedEvent()?.seriesId);
+
+  // Read straight off the store so the panel cannot drift from the desk — it
+  // previously mirrored these into signals, which then survived an undo.
+  protected readonly eventTitle = computed(() => this.selectedEvent()?.title ?? '');
+  protected readonly eventTime = computed(() => this.selectedEvent()?.timeLabel ?? 'All day');
+  protected readonly eventColor = computed(
+    () => `--stationery-${this.selectedEvent()?.color ?? 'blue'}`,
+  );
 
   /** Commits a title edit to the event behind the selected chip. */
   protected renameEvent(title: string): void {

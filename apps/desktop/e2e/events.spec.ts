@@ -19,6 +19,7 @@ declare global {
       occurrencesOn(iso: string): string[];
       selectOccurrenceOn(iso: string, index: number): boolean;
       selectEvent(id: string): boolean;
+      editSelectedOccurrence(title: string): boolean;
       viewport(): { panX: number; panY: number; zoom: number };
       panTo(x: number, y: number): void;
       toScreen(x: number, y: number): { x: number; y: number };
@@ -212,6 +213,55 @@ test('renaming an event in the inspector is kept', async ({ page }) => {
 
   const renamed = (await events(page)).find((e) => e.id === dentist.id)!;
   expect(renamed.title).toBe('Dentist — Dr. Okada');
+});
+
+test('clearing the title field cannot destroy a series', async ({ page }) => {
+  await openWorkspace(page);
+  await page.evaluate(() =>
+    window.__e2e.addEvent({
+      id: 'seminar',
+      title: 'Seminar',
+      color: 'violet',
+      date: '2026-09-01T00:00:00',
+      rrule: 'FREQ=WEEKLY;BYDAY=TU',
+    }),
+  );
+  const before = (await events(page)).length;
+  await page.evaluate(() => window.__e2e.selectEvent('seminar'));
+
+  // Emptying a text field is something people do before retyping. It must
+  // never take the series and every occurrence they had edited with it.
+  const title = page.getByLabel('Event title');
+  await title.fill('');
+  await title.blur();
+
+  expect((await events(page)).length).toBe(before);
+  expect((await events(page)).find((e) => e.id === 'seminar')!.title).toBe('Seminar');
+});
+
+test('editing one occurrence of a series leaves the others alone', async ({ page }) => {
+  await openWorkspace(page);
+  await page.evaluate(() =>
+    window.__e2e.addEvent({
+      id: 'seminar',
+      title: 'Seminar',
+      color: 'violet',
+      date: '2026-09-01T00:00:00',
+      rrule: 'FREQ=WEEKLY;BYDAY=TU',
+    }),
+  );
+  const onDate = (iso: string) => page.evaluate((d) => window.__e2e.occurrencesOn(d), iso);
+
+  // Double-clicking a computed occurrence materialises it, so the edit lands
+  // on that date only.
+  await page.evaluate(() => window.__e2e.selectOccurrenceOn('2026-09-15T00:00:00', 0));
+  await page.evaluate(() => window.__e2e.editSelectedOccurrence('Seminar — guest speaker'));
+
+  expect(await onDate('2026-09-15T00:00:00')).toContain('Seminar — guest speaker');
+  expect(await onDate('2026-09-22T00:00:00')).toContain('Seminar');
+  expect(await onDate('2026-09-22T00:00:00')).not.toContain('Seminar — guest speaker');
+  // The series head keeps its own name.
+  expect((await events(page)).find((e) => e.id === 'seminar')!.title).toBe('Seminar');
 });
 
 test('deleting one occurrence leaves the rest of the series standing', async ({ page }) => {

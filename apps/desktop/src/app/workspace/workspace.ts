@@ -167,6 +167,13 @@ export class Workspace {
   private readonly pendingText = signal<Point | null>(null);
   /** Event whose title is being typed in the overlay, if any. */
   private readonly editingEventId = signal<string | null>(null);
+  /**
+   * Day an event is being named for, before any row exists.
+   *
+   * Like {@link pendingText}: creating up front and deleting on an empty
+   * commit leaves an undo step that resurrects a nameless event.
+   */
+  private readonly pendingEventDate = signal<Date | null>(null);
   /** Select-all on focus (used for freshly created objects). */
   private selectAllOnFocus = false;
 
@@ -178,15 +185,16 @@ export class Workspace {
   /** Screen-space geometry and styling of the DOM text editor. */
   protected readonly editor = computed(() => {
     const eventId = this.editingEventId();
-    if (eventId) {
-      const event = this.events.get(eventId);
-      if (!event) return null;
+    const pendingDate = this.pendingEventDate();
+    if (eventId || pendingDate) {
+      const event = eventId ? this.events.get(eventId) : undefined;
+      if (eventId && !event) return null;
       const v = this.viewport.viewport();
       // Over the day's first chip row, in the chip's own type metrics.
-      const cell = cellRectForDate(event.occurrenceDate ?? event.date);
+      const cell = cellRectForDate(pendingDate ?? event!.occurrenceDate ?? event!.date);
       const inset = 10;
       return {
-        text: event.title,
+        text: event?.title ?? '',
         placeholder: 'Event name',
         left: v.panX + (cell.x + inset) * v.zoom,
         top: v.panY + (cell.y + 44) * v.zoom,
@@ -287,6 +295,10 @@ export class Workspace {
     effect(() => {
       const events = this.events.events();
       this.viewport.viewport();
+      // Resizing can reveal months of an adjacent year, which would otherwise
+      // draw empty until the next pan: the visible range depends on the view
+      // size as much as on the pan and zoom.
+      this.viewport.viewSize();
       if (!this.sceneReady()) return;
       const window = this.scene.visibleDateRange();
       const key = `${window.from.getFullYear()}:${window.to.getFullYear()}`;
@@ -462,13 +474,12 @@ export class Workspace {
     }
     if (hit?.kind === 'event') {
       const occurrence = this.storedEventAt(hit);
-      // A computed occurrence has no row to edit yet; changing one has to ask
-      // whether the edit means this date or the whole series, which arrives
-      // with the recurrence UI.
-      if (occurrence && !occurrence.virtual) {
-        this.selectEvent(hit);
-        this.openEventEditor(occurrence.event.id);
-      }
+      if (!occurrence) return;
+      this.selectEvent(hit);
+      // Editing a computed occurrence makes it a real one first, so the change
+      // lands on that date alone and leaves the rest of the series untouched —
+      // the safe scope, and the design record's governing rule.
+      this.openEventEditor(this.eventActions.materialise(occurrence));
       return;
     }
 
@@ -548,10 +559,17 @@ export class Workspace {
     const text = (event.target as HTMLTextAreaElement).value;
     this.tools.editing.set(false);
 
+    const pendingDate = this.pendingEventDate();
+    if (pendingDate) {
+      this.pendingEventDate.set(null);
+      // An unnamed event is nothing, and nothing is what gets created.
+      if (text.trim()) this.eventActions.create(pendingDate, text.trim());
+      return;
+    }
+
     const eventId = this.editingEventId();
     if (eventId) {
       this.editingEventId.set(null);
-      // An event with no name is nothing; the same rule as an empty text object.
       this.eventActions.setTitle(eventId, text);
       return;
     }
@@ -588,11 +606,6 @@ export class Workspace {
     this.selectAllOnFocus = selectAll;
     this.editingId.set(id);
     this.takeKeyboard();
-  }
-
-  /** Creates an untitled event on a day and returns its id. */
-  private createEventOn(date: Date): string {
-    return this.eventActions.create(date);
   }
 
   /** Opens the overlay to type an event's title. */
@@ -648,7 +661,9 @@ export class Workspace {
         // An event belongs to a day, so a click off the grid is a miss rather
         // than a mistake: stay armed and let the user try again on a date.
         if (hit?.kind !== 'cell') return true;
-        this.openEventEditor(this.createEventOn(hit.date));
+        this.selectAllOnFocus = false;
+        this.pendingEventDate.set(hit.date);
+        this.takeKeyboard();
         break;
       }
       default:
@@ -673,9 +688,6 @@ export class Workspace {
     if (!occurrence) return;
     this.selection.select('event', hit.id);
     this.selection.occurrence.set(occurrence);
-    this.selection.eventTitle.set(occurrence.event.title);
-    this.selection.eventTime.set(occurrence.event.timeLabel ?? 'All day');
-    this.selection.eventColor.set(`--stationery-${occurrence.event.color}`);
   }
 
   /** The stored event under an event-chip hit, if it has one yet. */

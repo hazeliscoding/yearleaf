@@ -17,6 +17,7 @@ declare global {
       events(): readonly EventData[];
       addEvent(event: Record<string, unknown>): void;
       occurrencesOn(iso: string): string[];
+      selectOccurrenceOn(iso: string, index: number): boolean;
       viewport(): { panX: number; panY: number; zoom: number };
       panTo(x: number, y: number): void;
       toScreen(x: number, y: number): { x: number; y: number };
@@ -115,6 +116,59 @@ test('a weekly series is stored once and drawn on every matching date', async ({
     window.__e2e.occurrencesOn('2026-09-02T00:00:00'),
   );
   expect(wednesday).not.toContain('Seminar');
+});
+
+test('creating an event is undoable', async ({ page }) => {
+  await openWorkspace(page);
+  const before = (await events(page)).length;
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Advisor meeting');
+  await page.keyboard.press('Escape');
+  expect((await events(page)).length).toBe(before + 1);
+
+  // Naming it is its own step, so the title is undone before the event.
+  await page.keyboard.press('Control+z');
+  await page.keyboard.press('Control+z');
+  expect((await events(page)).length).toBe(before);
+
+  await page.keyboard.press('Control+Shift+z');
+  await page.keyboard.press('Control+Shift+z');
+  const restored = await events(page);
+  expect(restored.length).toBe(before + 1);
+  expect(restored.at(-1)!.title).toBe('Advisor meeting');
+});
+
+test('cancelling one date suppresses it without touching the series', async ({ page }) => {
+  await openWorkspace(page);
+  await page.evaluate(() =>
+    window.__e2e.addEvent({
+      id: 'seminar',
+      title: 'Seminar',
+      color: 'violet',
+      date: '2026-09-01T00:00:00',
+      rrule: 'FREQ=WEEKLY;BYDAY=TU',
+    }),
+  );
+  const onDate = (iso: string) => page.evaluate((d) => window.__e2e.occurrencesOn(d), iso);
+  // The 1st carries no seeded events, so the seminar is the only chip there.
+  expect(await onDate('2026-09-01T00:00:00')).toEqual(['Seminar']);
+
+  await page.evaluate(() => window.__e2e.selectOccurrenceOn('2026-09-01T00:00:00', 0));
+  await page.keyboard.press('Delete');
+
+  expect(await onDate('2026-09-01T00:00:00')).not.toContain('Seminar');
+  // The rest of the series is untouched, including dates sharing a day with
+  // other events.
+  expect(await onDate('2026-09-08T00:00:00')).toContain('Seminar');
+  expect(await onDate('2026-09-15T00:00:00')).toContain('Seminar');
+
+  // And the cancellation is itself undoable.
+  await page.keyboard.press('Control+z');
+  expect(await onDate('2026-09-01T00:00:00')).toContain('Seminar');
 });
 
 test('deleting one occurrence leaves the rest of the series standing', async ({ page }) => {

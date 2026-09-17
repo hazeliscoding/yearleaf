@@ -4,6 +4,8 @@
 
 import { Injectable, computed, signal } from '@angular/core';
 
+import type { Occurrence } from '@infinite-desk/domain';
+
 /** What kind of thing is selected; drives which inspector renders. */
 export type SelectionKind = 'sticky' | 'image' | 'file' | 'text' | 'event';
 
@@ -25,6 +27,13 @@ export class SelectionStore {
   readonly eventTime = signal('14:00 – 14:40');
   /** Stationery custom property of the selected event's color. */
   readonly eventColor = signal('--stationery-teal');
+  /**
+   * The selected event chip resolved to an occurrence.
+   *
+   * A chip's id names a date and a slot, not a row — a computed occurrence has
+   * no row at all — so acting on the selection needs the occurrence itself.
+   */
+  readonly occurrence = signal<Occurrence | null>(null);
 
   /** Inspector heading for the current selection kind. */
   readonly inspectorTitle = computed(() => {
@@ -47,10 +56,12 @@ export class SelectionStore {
   /** Selects a desk object or event. */
   select(kind: SelectionKind, id: string): void {
     this.selection.set({ kind, id });
+    if (kind !== 'event') this.occurrence.set(null);
   }
 
   /** Clears the selection. */
   clear(): void {
     this.selection.set(null);
+    this.occurrence.set(null);
   }
 }

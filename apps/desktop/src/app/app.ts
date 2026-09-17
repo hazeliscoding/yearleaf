@@ -15,6 +15,7 @@ import { Toolbar } from './shell/toolbar';
 import { ToolRail } from './shell/tool-rail';
 import { DeskActions } from './state/desk-actions';
 import { DeskStore } from './state/desk-store';
+import { EventActions } from './state/event-actions';
 import { EventStore } from './state/event-store';
 import { HistoryStore } from './state/history-store';
 import { SelectionStore } from './state/selection-store';
@@ -91,6 +92,7 @@ export class App {
   private readonly events = inject(EventStore);
   private readonly history = inject(HistoryStore);
   private readonly actions = inject(DeskActions);
+  private readonly eventActions = inject(EventActions);
 
   /** Dark-theme flag; mirrored onto `<html data-theme>`. */
   protected readonly dark = signal(false);
@@ -137,6 +139,18 @@ export class App {
               ? new Date(event['occurrenceDate'] as string)
               : undefined,
           }),
+        // Selecting a chip by date rather than by pixel: the chip's position
+        // depends on zoom and on what else shares the day.
+        selectOccurrenceOn: (iso: string, index: number) => {
+          const day = new Date(iso);
+          const found = [...this.events.occurrencesByDate({ from: day, to: day }).values()]
+            .flat()
+            .at(index);
+          if (!found) return false;
+          this.selection.select('event', found.id);
+          this.selection.occurrence.set(found);
+          return true;
+        },
         toScreen: (x: number, y: number) => {
           const v = this.viewport.viewport();
           return { x: v.panX + x * v.zoom, y: v.panY + y * v.zoom };
@@ -238,9 +252,18 @@ export class App {
 
     const selected = this.selection.selection();
     const selectedObject = selected && selected.kind !== 'event' ? selected.id : null;
-    if ((event.key === 'Delete' || event.key === 'Backspace') && selectedObject) {
-      this.actions.deleteObject(selectedObject);
-      return;
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (selectedObject) {
+        this.actions.deleteObject(selectedObject);
+        return;
+      }
+      // Cancelling one date of a series suppresses that occurrence rather than
+      // deleting the series; both routes are undoable.
+      const occurrence = this.selection.occurrence();
+      if (occurrence) {
+        this.eventActions.removeOccurrence(occurrence);
+        return;
+      }
     }
     if (event.key.startsWith('Arrow') && selectedObject) {
       event.preventDefault();

@@ -38,6 +38,7 @@ import { DbLayerPanel, DbZoomControl } from '@infinite-desk/deskbound';
 import { sampleDayContent } from '../data/sample-desk';
 import { DeskActions } from '../state/desk-actions';
 import { DeskStore } from '../state/desk-store';
+import { EventActions } from '../state/event-actions';
 import { EventStore } from '../state/event-store';
 import { SelectionStore } from '../state/selection-store';
 import { ToolStore } from '../state/tool-store';
@@ -138,6 +139,7 @@ export class Workspace {
   protected readonly events = inject(EventStore);
   protected readonly selection = inject(SelectionStore);
   private readonly actions = inject(DeskActions);
+  private readonly eventActions = inject(EventActions);
   private readonly host = inject(ElementRef).nativeElement as HTMLElement;
   private readonly destroyRef = inject(DestroyRef);
 
@@ -549,10 +551,8 @@ export class Workspace {
     const eventId = this.editingEventId();
     if (eventId) {
       this.editingEventId.set(null);
-      const title = text.trim();
       // An event with no name is nothing; the same rule as an empty text object.
-      if (title) this.events.update(eventId, { title });
-      else this.events.remove(eventId);
+      this.eventActions.setTitle(eventId, text);
       return;
     }
 
@@ -592,10 +592,7 @@ export class Workspace {
 
   /** Creates an untitled event on a day and returns its id. */
   private createEventOn(date: Date): string {
-    const id = `event${Date.now()}`;
-    this.events.insert({ id, title: '', color: 'blue', date });
-    this.selection.select('event', id);
-    return id;
+    return this.eventActions.create(date);
   }
 
   /** Opens the overlay to type an event's title. */
@@ -675,6 +672,7 @@ export class Workspace {
     const occurrence = this.occurrenceIndex().get(dateKey(hit.date))?.[hit.index];
     if (!occurrence) return;
     this.selection.select('event', hit.id);
+    this.selection.occurrence.set(occurrence);
     this.selection.eventTitle.set(occurrence.event.title);
     this.selection.eventTime.set(occurrence.event.timeLabel ?? 'All day');
     this.selection.eventColor.set(`--stationery-${occurrence.event.color}`);

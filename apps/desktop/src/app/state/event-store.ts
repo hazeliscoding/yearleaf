@@ -12,6 +12,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import {
   dateKey,
   occurrencesInWindow,
+  type EventObjectStore,
   type EventRecord,
   type Occurrence,
 } from '@infinite-desk/domain';
@@ -45,7 +46,7 @@ function sampleEventRecords(): EventRecord[] {
 }
 
 @Injectable({ providedIn: 'root' })
-export class EventStore {
+export class EventStore implements EventObjectStore {
   private readonly persistence = inject(DESK_PERSISTENCE);
 
   /** Every stored event on the desk. */
@@ -74,6 +75,11 @@ export class EventStore {
   /** Returns the event with the given id, if present. */
   get(id: string): EventRecord | undefined {
     return this.events().find((e) => e.id === id);
+  }
+
+  /** Every stored event; commands snapshot from here before deleting. */
+  all(): readonly EventRecord[] {
+    return this.events();
   }
 
   /**

@@ -2,7 +2,6 @@
 .db-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--control-h);padding:0 12px;font:var(--text-ui-label);font-size:12.5px;color:var(--ink-primary);background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-subtle);cursor:pointer;transition:background var(--motion-fast) var(--ease-out),border-color var(--motion-fast) var(--ease-out);white-space:nowrap}
 .db-btn:hover{background:var(--hover);border-color:var(--border-strong)}
 .db-btn:active{background:var(--pressed)}
-.db-btn:disabled{color:var(--ink-disabled);background:var(--surface-paper);border-color:var(--divider);cursor:default}
 .db-btn--primary{background:var(--accent);border-color:var(--accent);color:var(--ink-inverse)}
 .db-btn--primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
 .db-btn--primary:active{background:var(--accent-pressed)}
@@ -12,6 +11,11 @@
 .db-btn--ghost:hover{background:var(--hover);color:var(--ink-primary);border-color:transparent}
 .db-btn--danger{background:transparent;border-color:var(--danger);color:var(--danger)}
 .db-btn--danger:hover{background:var(--danger);color:var(--ink-inverse)}
+/* Disabled is terminal, so it must outrank every variant's hover/active state —
+   these all share specificity (0,2,0) and the last one wins. A disabled button
+   that fills with accent under the cursor is exactly the "looks alive, does
+   nothing" state the variants are meant to signal against. */
+.db-btn:disabled,.db-btn:disabled:hover,.db-btn:disabled:active{color:var(--ink-disabled);background:var(--surface-paper);border-color:var(--divider);cursor:default}
 .db-btn--sm{height:var(--control-h-sm);padding:0 8px;font-size:11.5px}
 .db-btn--lg{height:var(--control-h-lg);padding:0 16px;font-size:13px}
 .db-btn--icon{width:var(--control-h);padding:0}

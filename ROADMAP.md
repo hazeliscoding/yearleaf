@@ -79,7 +79,8 @@ multi-select, and sharper text rasterization at high zoom.
 - [ ] Finish-gate items on the event chrome: the title editor's position, type size and fill are hardcoded constants that disagree with `drawEventChip`, so text shifts on commit; the editor always opens on the day's first chip row, hiding whatever is already there; the inspector's "Time" row is still a dead value
 - [x] Recurrence UI: the inspector's Repeats control creates or clears a series (Never/Daily/Weekly/Monthly/Yearly, anchored on the event's own date); richer rules show as "Custom" rather than being silently simplified. Title and colour edits finally persist
 - [ ] Handwriting and highlighter strokes; choose the drawing representation (ADR open question)
-- [ ] Image import via drag and drop; attachments copied into the managed asset directory with checksums
+- [x] Image import via drag and drop; attachments copied into the managed asset directory with checksums (migration 4), drawn as real bitmaps, deduplicated by content, and held in memory in the browser build
+- [ ] Attachment follow-ups: nothing reclaims an asset file when the last object using it is deleted, and imports cross IPC as a JSON byte array, which will not scale to large files
 
 ## Milestone 5 — Findability and safety (delivery step 8)
 

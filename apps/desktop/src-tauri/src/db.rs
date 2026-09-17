@@ -176,6 +176,64 @@ fn open_with(
   Ok(conn)
 }
 
+/**
+Reclaims attachments nothing on the desk refers to any more.
+
+Safe to run at startup precisely because history does not survive a restart:
+the undo stack is empty, so no deleted object can come back to claim its
+picture, and no grace period is needed. Reference counting would be the wrong
+shape here — one attachment legitimately backs several objects, and undo makes
+any count oscillate.
+
+Rows go first and files last, so an interruption leaves a file with no row
+(harmless, swept next time) rather than a row pointing at nothing.
+*/
+pub fn sweep_unreferenced_attachments(
+  conn: &Connection,
+  assets: &Path,
+) -> rusqlite::Result<usize> {
+  let mut stmt = conn.prepare(
+    "SELECT relative_path FROM attachment
+     WHERE id NOT IN (
+       SELECT json_extract(payload, '$.attachmentId') FROM calendar_object
+       WHERE json_extract(payload, '$.attachmentId') IS NOT NULL
+     )",
+  )?;
+  let orphaned: Vec<String> = stmt
+    .query_map([], |row| row.get(0))?
+    .collect::<rusqlite::Result<_>>()?;
+  drop(stmt);
+  if orphaned.is_empty() {
+    return Ok(0);
+  }
+
+  conn.execute(
+    "DELETE FROM attachment
+     WHERE id NOT IN (
+       SELECT json_extract(payload, '$.attachmentId') FROM calendar_object
+       WHERE json_extract(payload, '$.attachmentId') IS NOT NULL
+     )",
+    [],
+  )?;
+
+  for relative_path in &orphaned {
+    // Desks share a file when they imported the same picture, so only unlink
+    // once no row anywhere still points at it.
+    let still_used: i64 = conn.query_row(
+      "SELECT count(*) FROM attachment WHERE relative_path = ?1",
+      [relative_path],
+      |row| row.get(0),
+    )?;
+    if still_used > 0 {
+      continue;
+    }
+    if let Some(name) = relative_path.rsplit('/').next() {
+      let _ = std::fs::remove_file(assets.join(name));
+    }
+  }
+  Ok(orphaned.len())
+}
+
 #[cfg(test)]
 pub mod tests {
   use super::*;
@@ -296,6 +354,95 @@ pub mod tests {
     drop(conn);
     let _ = std::fs::remove_file(&path);
     let _ = std::fs::remove_file(&backup);
+  }
+
+  /// Seeds an attachment row plus its file, and optionally an object using it.
+  fn seed_attachment(
+    conn: &Connection,
+    assets: &Path,
+    desk: &str,
+    id: &str,
+    stored_name: &str,
+    used_by: Option<&str>,
+  ) {
+    std::fs::create_dir_all(assets).expect("assets dir");
+    std::fs::write(assets.join(stored_name), b"bytes").expect("file");
+    conn
+      .execute("INSERT OR IGNORE INTO desk (id, name) VALUES (?1, ?1)", [desk])
+      .expect("desk");
+    conn
+      .execute(
+        "INSERT INTO attachment (id, desk_id, file_name, relative_path, media_type, byte_size, checksum)
+         VALUES (?1, ?2, 'p.png', ?3, 'image/png', 5, ?4)",
+        // The stored name is the checksum, so a file shared by two desks is
+        // two rows carrying the same checksum under different ids.
+        rusqlite::params![
+          id,
+          desk,
+          format!("assets/{stored_name}"),
+          stored_name.trim_end_matches(".png")
+        ],
+      )
+      .expect("attachment");
+    if let Some(object_id) = used_by {
+      conn
+        .execute(
+          "INSERT INTO calendar_object (id, desk_id, kind, x, y, width, height, payload)
+           VALUES (?1, ?2, 'image', 0, 0, 100, 100, ?3)",
+          rusqlite::params![
+            object_id,
+            desk,
+            format!("{{\"kind\":\"image\",\"attachmentId\":\"{id}\"}}")
+          ],
+        )
+        .expect("object");
+    }
+  }
+
+  #[test]
+  fn the_sweep_keeps_pictures_that_are_still_on_the_desk() {
+    let conn = open_test_db();
+    let assets = std::env::temp_dir().join(format!("yearleaf-sweep-keep-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&assets);
+    seed_attachment(&conn, &assets, "d", "used", "used.png", Some("obj-1"));
+
+    assert_eq!(sweep_unreferenced_attachments(&conn, &assets).expect("sweep"), 0);
+    assert!(assets.join("used.png").exists());
+    let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn the_sweep_reclaims_a_picture_no_object_refers_to() {
+    let conn = open_test_db();
+    let assets = std::env::temp_dir().join(format!("yearleaf-sweep-drop-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&assets);
+    seed_attachment(&conn, &assets, "d", "orphan", "orphan.png", None);
+
+    assert_eq!(sweep_unreferenced_attachments(&conn, &assets).expect("sweep"), 1);
+    let rows: i64 = conn
+      .query_row("SELECT count(*) FROM attachment", [], |row| row.get(0))
+      .expect("count");
+    assert_eq!(rows, 0);
+    assert!(!assets.join("orphan.png").exists());
+    let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn the_sweep_keeps_a_file_two_desks_share() {
+    let conn = open_test_db();
+    let assets = std::env::temp_dir().join(format!("yearleaf-sweep-share-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&assets);
+    // The same picture imported on two desks is two rows over one file, since
+    // the filename is the checksum. Dropping one must not take the file.
+    seed_attachment(&conn, &assets, "d1", "a1", "shared.png", None);
+    seed_attachment(&conn, &assets, "d2", "a2", "shared.png", Some("obj-2"));
+
+    assert_eq!(sweep_unreferenced_attachments(&conn, &assets).expect("sweep"), 1);
+    assert!(
+      assets.join("shared.png").exists(),
+      "the surviving desk still shows this picture"
+    );
+    let _ = std::fs::remove_dir_all(&assets);
   }
 
   #[test]

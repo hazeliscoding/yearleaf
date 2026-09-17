@@ -12,6 +12,15 @@ import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core';
 
 import { DESK_ID } from '../state/desk-store';
 
+/**
+ * Largest file the desk will import, mirroring the ceiling the Rust importer
+ * enforces. Checked here too so an oversized drop is refused before the
+ * browser decodes it — a thirty megabyte photo is hundreds of megabytes once
+ * decoded, and paying that only to be turned away at the boundary is worse
+ * than not starting.
+ */
+export const MAX_ATTACHMENT_BYTES = 32 * 1024 * 1024;
+
 /** An imported file, as the application refers to it. */
 export interface Attachment {
   readonly id: string;
@@ -75,18 +84,25 @@ export class AttachmentStore {
    * persistence adapter already makes.
    */
   async import(file: File): Promise<Attachment> {
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`${file.name} is too large to import`);
+    }
     const attachment = isTauri() ? await this.importToDisk(file) : this.importToMemory(file);
     this.byId.update((map) => new Map(map).set(attachment.id, attachment));
     return attachment;
   }
 
   private async importToDisk(file: File): Promise<Attachment> {
-    const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-    const wire = await invoke<AttachmentWire>('import_attachment', {
-      deskId: DESK_ID,
-      fileName: file.name,
-      mediaType: file.type || 'application/octet-stream',
-      bytes,
+    // The bytes go over as the request body, not as a command argument: an
+    // argument is serialized to a JSON array of integers, which would turn a
+    // four megabyte photo into roughly twelve megabytes of text.
+    const wire = await invoke<AttachmentWire>('import_attachment', await file.arrayBuffer(), {
+      headers: {
+        'desk-id': DESK_ID,
+        'media-type': file.type || 'application/octet-stream',
+        // Header values must be ASCII; a file name need not be.
+        'file-name': encodeURIComponent(file.name),
+      },
     });
     return this.toAttachment(wire);
   }

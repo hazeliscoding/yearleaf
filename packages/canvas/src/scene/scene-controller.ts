@@ -30,6 +30,7 @@ import { tierForZoom, type Point, type ViewportState, type ZoomTier } from '../v
 import { buildMonthView } from './month-view';
 import { buildObjectView } from './object-view';
 import { parseEventChipId, type SceneHit, type SceneInitOptions } from './scene-types';
+import { boundToTextureCeiling } from './texture-bounds';
 import { readThemeTokens, type ThemeTokens } from './theme';
 
 /** World-unit spacing of the faint paper grid. */
@@ -379,6 +380,7 @@ export class CalendarSceneController {
     void fetch(url)
       .then((response) => response.blob())
       .then((blob) => createImageBitmap(blob))
+      .then(boundToTextureCeiling)
       .then((bitmap) => {
         this.textures.set(attachmentId, Texture.from(bitmap));
         this.rebuildObjectsUsing(attachmentId);

@@ -18,12 +18,21 @@ pub fn run() {
       let data_dir = app.path().app_data_dir()?;
       std::fs::create_dir_all(&data_dir)?;
       let conn = db::open(&data_dir.join("infinite-desk.db"))?;
-      app.manage(commands::Db(std::sync::Mutex::new(conn)));
 
       // Imported binaries sit beside the database, per the architecture
       // record's desk layout, so a desk is one directory to copy or back up.
       let assets = data_dir.join("assets");
       std::fs::create_dir_all(&assets)?;
+
+      // Reclaim pictures nothing refers to any more. Startup is the safe
+      // moment: the undo history is empty, so nothing can claim them back.
+      match db::sweep_unreferenced_attachments(&conn, &assets) {
+        Ok(0) => {}
+        Ok(count) => log::info!("reclaimed {count} unreferenced attachment(s)"),
+        Err(error) => log::warn!("attachment sweep failed: {error}"),
+      }
+
+      app.manage(commands::Db(std::sync::Mutex::new(conn)));
       app.manage(commands::AssetRoot(assets));
       Ok(())
     })

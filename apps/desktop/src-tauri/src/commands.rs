@@ -335,6 +335,29 @@ pub struct AttachmentRecord {
   pub path: String,
 }
 
+/// Largest file the importer accepts. A desk holds snapshots and scans, not
+/// camera originals, and refusing early beats copying a hundred megabytes into
+/// the desk directory before anything can look at it.
+const MAX_ATTACHMENT_BYTES: usize = 32 * 1024 * 1024;
+
+/// Reads one of the headers carrying an import's metadata beside its bytes.
+fn required_header<'a>(request: &'a tauri::ipc::Request<'_>, name: &str) -> Result<&'a str, String> {
+  request
+    .headers()
+    .get(name)
+    .and_then(|value| value.to_str().ok())
+    .ok_or_else(|| format!("import_attachment is missing the {name} header"))
+}
+
+/// Undoes the percent-encoding the webview applies so a file name with
+/// accents or CJK characters survives a header, which may only carry ASCII.
+fn decoded_file_name(raw: &str) -> Result<String, String> {
+  percent_encoding::percent_decode_str(raw)
+    .decode_utf8()
+    .map(|name| name.into_owned())
+    .map_err(|_| "attachment file name is not valid UTF-8".to_owned())
+}
+
 /// Lowercase hex SHA-256 of the given bytes.
 fn checksum_of(bytes: &[u8]) -> String {
   use sha2::{Digest, Sha256};
@@ -363,6 +386,13 @@ fn import_attachment_impl(
 ) -> Result<AttachmentRecord, String> {
   if bytes.is_empty() {
     return Err("refusing to import an empty file".into());
+  }
+  if bytes.len() > MAX_ATTACHMENT_BYTES {
+    return Err(format!(
+      "refusing to import {} MB; the limit is {} MB",
+      bytes.len() / (1024 * 1024),
+      MAX_ATTACHMENT_BYTES / (1024 * 1024)
+    ));
   }
   // The only importer today is the picture drop, which filters by type in the
   // webview. Checking again here keeps the rule on the trusted side of the
@@ -436,17 +466,27 @@ fn import_attachment_impl(
 }
 
 /// Copies an imported file into the desk's asset directory and records it.
+///
+/// The bytes arrive as the raw request body rather than a command argument:
+/// as an argument they would be serialized to a JSON array of integers, so a
+/// four megabyte photo would cross the boundary as roughly twelve megabytes of
+/// text and be allocated again on each side. The metadata rides along in
+/// headers, whose values must be ASCII — hence the percent-encoded file name.
 #[tauri::command]
 pub async fn import_attachment(
   db: State<'_, Db>,
   assets: State<'_, AssetRoot>,
-  desk_id: String,
-  file_name: String,
-  media_type: String,
-  bytes: Vec<u8>,
+  request: tauri::ipc::Request<'_>,
 ) -> Result<AttachmentRecord, String> {
+  let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+    return Err("import_attachment expects the file bytes as the request body".into());
+  };
+  let desk_id = required_header(&request, "desk-id")?.to_owned();
+  let media_type = required_header(&request, "media-type")?.to_owned();
+  let file_name = decoded_file_name(required_header(&request, "file-name")?)?;
+
   let conn = db.0.lock().map_err(|e| e.to_string())?;
-  import_attachment_impl(&conn, &assets.0, &desk_id, &file_name, &media_type, &bytes)
+  import_attachment_impl(&conn, &assets.0, &desk_id, &file_name, &media_type, bytes)
 }
 
 /// Every attachment on the desk, so stored image objects can find their bytes.
@@ -719,6 +759,27 @@ mod tests {
     let assets = temp_assets("empty");
     assert!(import_attachment_impl(&conn, &assets, "desk-1", "x.png", "image/png", b"").is_err());
     let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn importing_refuses_a_file_past_the_size_ceiling() {
+    let conn = open_test_db();
+    let assets = temp_assets("oversize");
+    let huge = vec![0u8; MAX_ATTACHMENT_BYTES + 1];
+    let error = import_attachment_impl(&conn, &assets, "desk-1", "big.png", "image/png", &huge)
+      .expect_err("past the ceiling");
+    assert!(error.contains("the limit is 32 MB"), "{error}");
+    // Nothing was copied before the refusal.
+    assert!(!assets.exists() || std::fs::read_dir(&assets).expect("dir").count() == 0);
+    let _ = std::fs::remove_dir_all(&assets);
+  }
+
+  #[test]
+  fn a_percent_encoded_file_name_survives_the_header() {
+    // Header values are ASCII-only, so the webview encodes the name. Getting
+    // this wrong would store a mangled name the user never typed.
+    assert_eq!(decoded_file_name("caf%C3%A9%20sketch.png").expect("decoded"), "café sketch.png");
+    assert_eq!(decoded_file_name("plain.png").expect("decoded"), "plain.png");
   }
 
   #[test]

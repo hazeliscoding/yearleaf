@@ -36,7 +36,7 @@ import { dateKey, type Occurrence } from '@infinite-desk/domain';
 import { DbLayerPanel, DbZoomControl } from '@infinite-desk/deskbound';
 
 import { sampleDayContent } from '../data/sample-desk';
-import { AttachmentStore } from '../persistence/attachments';
+import { AttachmentStore, MAX_ATTACHMENT_BYTES } from '../persistence/attachments';
 import { DeskActions } from '../state/desk-actions';
 import { DeskStore } from '../state/desk-store';
 import { EventActions } from '../state/event-actions';
@@ -545,6 +545,12 @@ export class Workspace {
 
     for (const [index, file] of files.entries()) {
       try {
+        // Checked before the decode, not after: decoding is where an oversized
+        // file actually hurts, so the ceiling has to be read first to be worth
+        // anything. The importer refuses the same size on its own side.
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          throw new Error(`${file.name} is too large to import`);
+        }
         // Measured from the file itself: one decode, and no dependence on the
         // attachment URL being readable yet.
         const bitmap = await createImageBitmap(file);

@@ -155,6 +155,21 @@ test('typing the instant a note appears cannot arm tools or pan', async ({ page 
   expect((await floats(page)).length).toBe(before + 1);
 });
 
+test('the empty-note prompt is chrome and never becomes content', async ({ page }) => {
+  await openWorkspace(page);
+
+  await page.keyboard.press('n');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.press('Escape');
+
+  // The note shows a prompt on the paper, but the payload stays empty — this
+  // is what separates a prompt from the old committed placeholder.
+  const created = (await floats(page)).at(-1)!;
+  expect(created.payload.text).toBe('');
+});
+
 test('the task tool creates a checklist sticky with a tickable item', async ({ page }) => {
   await openWorkspace(page);
 

@@ -70,6 +70,41 @@ test('the search overlay wears the same chrome as the command palette', async ({
   expect(search.hasGlyph).toBe(true);
 });
 
+test('a disabled primary button stays disabled-looking under the cursor', async ({ page }) => {
+  await openWorkspace(page);
+  const newEvent = page.getByRole('button', { name: /New event/ });
+  await expect(newEvent).toBeDisabled();
+
+  const resting = await newEvent.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await newEvent.hover({ force: true });
+  const hovered = await newEvent.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  // `:disabled` and `.db-btn--primary:hover` share specificity, so whichever
+  // rule comes last wins: the button used to fill with accent under the cursor
+  // while still doing nothing.
+  expect(hovered).toBe(resting);
+  expect(hovered).not.toBe('rgb(156, 83, 16)');
+});
+
+test('the composition overlay floats above the canvas panels', async ({ page }) => {
+  await openWorkspace(page);
+  const host = (await page.locator('[data-screen-label="Canvas"]').boundingBox())!;
+
+  // The layer panel sits in the bottom-right corner; typing must not go into a
+  // field hidden behind it.
+  const target = { x: host.x + host.width - 120, y: host.y + host.height - 120 };
+  await page.mouse.dblclick(target.x, target.y);
+  const editor = page.getByLabel('Edit text');
+  await expect(editor).toBeFocused();
+
+  const onTop = await editor.evaluate((el) => {
+    const b = el.getBoundingClientRect();
+    const top = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
+    return top === el;
+  });
+  expect(onTop).toBe(true);
+});
+
 test('the search glyph sits inside the field and is vertically centred', async ({ page }) => {
   await openWorkspace(page);
   const geom = await page.evaluate(() => {

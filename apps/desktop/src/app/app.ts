@@ -139,6 +139,22 @@ export class App {
               ? new Date(event['occurrenceDate'] as string)
               : undefined,
           }),
+        // Selects the chip belonging to one stored event, wherever it sits.
+        selectEvent: (id: string) => {
+          const event = this.events.get(id);
+          if (!event) return false;
+          const day = event.occurrenceDate ?? event.date;
+          const found = [...this.events.occurrencesByDate({ from: day, to: day }).values()]
+            .flat()
+            .find((o) => o.event.id === id);
+          if (!found) return false;
+          this.selection.select('event', found.id);
+          this.selection.occurrence.set(found);
+          this.selection.eventTitle.set(found.event.title);
+          this.selection.eventTime.set(found.event.timeLabel ?? 'All day');
+          this.selection.eventColor.set(`--stationery-${found.event.color}`);
+          return true;
+        },
         // Selecting a chip by date rather than by pixel: the chip's position
         // depends on zoom and on what else shares the day.
         selectOccurrenceOn: (iso: string, index: number) => {

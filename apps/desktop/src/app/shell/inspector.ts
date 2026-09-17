@@ -5,7 +5,7 @@
 
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
-import type { StationeryColor } from '@infinite-desk/domain';
+import { presetForRule, type RepeatPreset, type StationeryColor } from '@infinite-desk/domain';
 import {
   DbColorPicker,
   DbInspectorGroup,
@@ -19,6 +19,8 @@ import {
 
 import { DeskActions } from '../state/desk-actions';
 import { DeskStore } from '../state/desk-store';
+import { EventActions } from '../state/event-actions';
+import { EventStore } from '../state/event-store';
 import { SelectionStore } from '../state/selection-store';
 
 @Component({
@@ -69,6 +71,7 @@ import { SelectionStore } from '../state/selection-store';
                 style="flex:1;min-width:0;height:26px;border:1px solid var(--border);border-radius:var(--radius-subtle);background:var(--surface-raised);padding:0 8px;font:13px var(--font-ui);color:var(--ink-primary)"
                 [value]="selection.eventTitle()"
                 (input)="selection.eventTitle.set($any($event.target).value)"
+                (change)="renameEvent($any($event.target).value)"
               />
             </db-inspector-row>
             <db-inspector-row label="Time">
@@ -77,16 +80,35 @@ import { SelectionStore } from '../state/selection-store';
               }}</span>
             </db-inspector-row>
             <db-inspector-row label="Color">
-              <db-color-picker [value]="selection.eventColor()" />
+              <db-color-picker [value]="selection.eventColor()" (valueChange)="recolorEvent($event)" />
             </db-inspector-row>
           </db-inspector-group>
           <db-inspector-group label="Schedule">
-            <db-inspector-row label="Repeats"><db-toggle [checked]="true" label="" /></db-inspector-row>
-            <db-inspector-row label="Reminder"><db-toggle [checked]="true" label="" /></db-inspector-row>
-            <db-inspector-row label="Calendar">
-              <db-segmented [options]="['Work', 'Personal']" value="Work" />
+            <db-inspector-row label="Repeats">
+              <!-- A dropdown rather than a segmented control: five options do
+                   not fit the inspector's width, and the last two would sit
+                   off the edge of the panel. -->
+              <div class="db-select" style="flex:1;min-width:0">
+                <select
+                  aria-label="Repeats"
+                  style="width:100%"
+                  [value]="repeatValue()"
+                  (change)="setRepeat($any($event.target).value)"
+                >
+                  @for (option of repeatOptions(); track option) {
+                    <option [value]="option" [selected]="option === repeatValue()">{{ option }}</option>
+                  }
+                </select>
+              </div>
             </db-inspector-row>
           </db-inspector-group>
+          @if (editsWholeSeries()) {
+            <div
+              style="padding:8px 12px;font:var(--text-caption);color:var(--ink-secondary);border-bottom:1px solid var(--divider)"
+            >
+              This event repeats — changes here apply to every occurrence.
+            </div>
+          }
         }
         @case ('image') {
           <db-inspector-group label="Image">
@@ -117,6 +139,70 @@ export class Inspector {
   protected readonly selection = inject(SelectionStore);
   private readonly desk = inject(DeskStore);
   private readonly actions = inject(DeskActions);
+  private readonly eventActions = inject(EventActions);
+  private readonly events = inject(EventStore);
+
+  /**
+   * Repeat choices offered for an event, plainly worded. A rule richer than
+   * the presets gains a "Custom" entry so the control can show what is in
+   * force instead of appearing to be set to nothing.
+   */
+  protected readonly repeatOptions = computed(() => {
+    const base = ['Never', 'Daily', 'Weekly', 'Monthly', 'Yearly'];
+    return this.repeatValue() === 'Custom' ? [...base, 'Custom'] : base;
+  });
+
+  /**
+   * The event behind the selected chip, read live from the store.
+   *
+   * The selection holds the occurrence as it was when clicked; reading the
+   * event out of that snapshot would leave the panel showing stale values the
+   * moment one of its own controls changed something.
+   */
+  private readonly selectedEvent = computed(() => {
+    const id = this.selection.occurrence()?.event.id;
+    return id ? this.events.get(id) : undefined;
+  });
+
+  /** The repeat preset currently in force, as a segmented value. */
+  protected readonly repeatValue = computed(() => {
+    const event = this.selectedEvent();
+    if (!event) return 'Never';
+    const preset = presetForRule(event.rrule, event.date);
+    if (preset) return preset[0].toUpperCase() + preset.slice(1);
+    // A richer rule than the presets describe must not be shown as one of
+    // them, or picking a preset would silently simplify it.
+    return event.rrule ? 'Custom' : 'Never';
+  });
+
+  /** `true` when the selection belongs to a series, so edits reach them all. */
+  protected readonly editsWholeSeries = computed(() => !!this.selectedEvent()?.rrule);
+
+  /** Commits a title edit to the event behind the selected chip. */
+  protected renameEvent(title: string): void {
+    const event = this.selectedEvent();
+    if (event) this.eventActions.setTitle(event.id, title);
+  }
+
+  /** Recolours the event behind the selected chip. */
+  protected recolorEvent(cssVar: string): void {
+    const event = this.selectedEvent();
+    if (!event) return;
+    this.eventActions.setColor(
+      event.id,
+      cssVar.replace('--stationery-', '') as StationeryColor,
+    );
+  }
+
+  /** Applies a repeat choice, or stops the event repeating. */
+  protected setRepeat(choice: string): void {
+    const event = this.selectedEvent();
+    if (!event || choice === 'Custom') return;
+    this.eventActions.setRepeat(
+      event.id,
+      choice === 'Never' ? null : (choice.toLowerCase() as RepeatPreset),
+    );
+  }
 
   /** Selection kind driving the rendered groups. */
   protected readonly kind = computed(() => this.selection.selection()?.kind ?? null);

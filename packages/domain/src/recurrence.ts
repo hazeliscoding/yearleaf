@@ -257,6 +257,40 @@ export function formatRecurrenceRule(rule: RecurrenceRule): string {
   return parts.join(';');
 }
 
+/** The plain-language repeats the inspector offers. */
+export type RepeatPreset = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+/**
+ * Builds the rule behind a repeat preset, anchored on the event's own date.
+ *
+ * "Weekly" means the weekday the event already falls on and "monthly" its day
+ * of the month, so choosing a repeat never silently moves the event.
+ *
+ * @param preset - The chosen repeat.
+ * @param date - The event's date, which anchors the rule.
+ */
+export function ruleForPreset(preset: RepeatPreset, date: Date): string {
+  switch (preset) {
+    case 'daily':
+      return 'FREQ=DAILY';
+    case 'weekly':
+      return `FREQ=WEEKLY;BYDAY=${weekdayOf(date)}`;
+    case 'monthly':
+      return `FREQ=MONTHLY;BYMONTHDAY=${date.getDate()}`;
+    case 'yearly':
+      return 'FREQ=YEARLY';
+  }
+}
+
+/** The preset a stored rule corresponds to, or `null` for anything richer. */
+export function presetForRule(rrule: string | undefined, date: Date): RepeatPreset | null {
+  if (!rrule) return null;
+  for (const preset of ['daily', 'weekly', 'monthly', 'yearly'] as const) {
+    if (ruleForPreset(preset, date) === rrule) return preset;
+  }
+  return null;
+}
+
 /** Candidate dates for one period, ascending; invalid ones are dropped. */
 function datesForPeriod(rule: RecurrenceRule, start: Date, period: number): Date[] {
   switch (rule.freq) {

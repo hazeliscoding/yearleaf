@@ -10,8 +10,11 @@ import {
   AddEventCommand,
   DeleteEventCommand,
   UpdateEventCommand,
+  ruleForPreset,
   type EventRecord,
   type Occurrence,
+  type RepeatPreset,
+  type StationeryColor,
 } from '@infinite-desk/domain';
 
 import { EventStore } from './event-store';
@@ -46,6 +49,33 @@ export class EventActions {
     }
     this.history.execute(
       new UpdateEventCommand(this.events, id, { title: trimmed }, 'Rename event'),
+    );
+  }
+
+  /** Recolours an event. */
+  setColor(id: string, color: StationeryColor): void {
+    this.history.execute(
+      new UpdateEventCommand(this.events, id, { color }, 'Recolour event'),
+    );
+  }
+
+  /**
+   * Sets or clears how an event repeats.
+   *
+   * The rule is anchored on the event's own date, so choosing "weekly" means
+   * the weekday it already falls on rather than moving it.
+   */
+  setRepeat(id: string, preset: RepeatPreset | null): void {
+    const event = this.events.get(id);
+    if (!event) return;
+    const rrule = preset ? ruleForPreset(preset, event.date) : undefined;
+    this.history.execute(
+      new UpdateEventCommand(
+        this.events,
+        id,
+        { rrule },
+        rrule ? 'Repeat event' : 'Stop repeating',
+      ),
     );
   }
 

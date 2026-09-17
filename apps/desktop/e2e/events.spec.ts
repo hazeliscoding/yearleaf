@@ -18,6 +18,7 @@ declare global {
       addEvent(event: Record<string, unknown>): void;
       occurrencesOn(iso: string): string[];
       selectOccurrenceOn(iso: string, index: number): boolean;
+      selectEvent(id: string): boolean;
       viewport(): { panX: number; panY: number; zoom: number };
       panTo(x: number, y: number): void;
       toScreen(x: number, y: number): { x: number; y: number };
@@ -169,6 +170,48 @@ test('cancelling one date suppresses it without touching the series', async ({ p
   // And the cancellation is itself undoable.
   await page.keyboard.press('Control+z');
   expect(await onDate('2026-09-01T00:00:00')).toContain('Seminar');
+});
+
+test('the inspector turns an event into a weekly series', async ({ page }) => {
+  await openWorkspace(page);
+
+  // Create an event on a Tuesday, the way a user would.
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Seminar');
+  await page.keyboard.press('Escape');
+
+  const created = (await events(page)).at(-1)!;
+  await page.evaluate((id) => window.__e2e.selectEvent(id), created.id);
+
+  // The Repeats control is the only way to make a series without code.
+  const repeats = page.getByLabel('Repeats');
+  await expect(repeats).toBeVisible();
+  await repeats.selectOption('Weekly');
+
+  const stored = (await events(page)).find((e) => e.id === created.id)!;
+  expect(stored.rrule).toMatch(/^FREQ=WEEKLY;BYDAY=/);
+
+  // Repeating is one undoable step, like every other edit.
+  await page.keyboard.press('Control+z');
+  expect((await events(page)).find((e) => e.id === created.id)!.rrule).toBeUndefined();
+});
+
+test('renaming an event in the inspector is kept', async ({ page }) => {
+  await openWorkspace(page);
+  const dentist = (await events(page)).find((e) => e.title === 'Dentist')!;
+  await page.evaluate((id) => window.__e2e.selectEvent(id), dentist.id);
+
+  // Previously the inspector wrote to a signal nothing persisted, so a rename
+  // silently vanished.
+  const title = page.getByLabel('Event title');
+  await title.fill('Dentist — Dr. Okada');
+  await title.blur();
+
+  const renamed = (await events(page)).find((e) => e.id === dentist.id)!;
+  expect(renamed.title).toBe('Dentist — Dr. Okada');
 });
 
 test('deleting one occurrence leaves the rest of the series standing', async ({ page }) => {

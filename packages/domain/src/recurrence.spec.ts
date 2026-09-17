@@ -5,6 +5,8 @@ import {
   expandRecurrence,
   formatRecurrenceRule,
   parseRecurrenceRule,
+  presetForRule,
+  ruleForPreset,
 } from './recurrence';
 
 /** Local-midnight date, so tests read as calendar dates. */
@@ -67,6 +69,33 @@ describe('formatRecurrenceRule', () => {
     'FREQ=YEARLY;WKST=SU',
   ])('round-trips %s', (text) => {
     expect(formatRecurrenceRule(parseRecurrenceRule(text))).toBe(text);
+  });
+});
+
+describe('repeat presets', () => {
+  it('anchors weekly and monthly on the event’s own date', () => {
+    const tuesday = d(2026, 9, 15);
+    expect(ruleForPreset('weekly', tuesday)).toBe('FREQ=WEEKLY;BYDAY=TU');
+    expect(ruleForPreset('monthly', tuesday)).toBe('FREQ=MONTHLY;BYMONTHDAY=15');
+    expect(ruleForPreset('daily', tuesday)).toBe('FREQ=DAILY');
+    expect(ruleForPreset('yearly', tuesday)).toBe('FREQ=YEARLY');
+  });
+
+  it('produces rules that keep the anchor date as an occurrence', () => {
+    const tuesday = d(2026, 9, 15);
+    for (const preset of ['daily', 'weekly', 'monthly', 'yearly'] as const) {
+      const rule = parseRecurrenceRule(ruleForPreset(preset, tuesday));
+      const dates = expandRecurrence(rule, tuesday, { from: tuesday, to: tuesday });
+      expect(iso(dates), preset).toEqual(['2026-09-15']);
+    }
+  });
+
+  it('recognises its own rules, and declines to simplify richer ones', () => {
+    const tuesday = d(2026, 9, 15);
+    expect(presetForRule('FREQ=WEEKLY;BYDAY=TU', tuesday)).toBe('weekly');
+    expect(presetForRule(undefined, tuesday)).toBeNull();
+    // A fortnightly rule is not any of the presets and must not be mislabelled.
+    expect(presetForRule('FREQ=WEEKLY;INTERVAL=2;BYDAY=TU', tuesday)).toBeNull();
   });
 });
 

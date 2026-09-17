@@ -24,17 +24,21 @@ import {
 
 import {
   CalendarSceneController,
+  cellRectForDate,
   checklistItemAt,
   screenToWorld,
+  type DayContent,
   type Point,
   type SceneHit,
   type WorldRect,
 } from '@infinite-desk/canvas';
+import { dateKey, type Occurrence } from '@infinite-desk/domain';
 import { DbLayerPanel, DbZoomControl } from '@infinite-desk/deskbound';
 
 import { sampleDayContent } from '../data/sample-desk';
 import { DeskActions } from '../state/desk-actions';
 import { DeskStore } from '../state/desk-store';
+import { EventStore } from '../state/event-store';
 import { SelectionStore } from '../state/selection-store';
 import { ToolStore } from '../state/tool-store';
 import { ViewportStore } from '../state/viewport-store';
@@ -131,6 +135,7 @@ export class Workspace {
   protected readonly viewport = inject(ViewportStore);
   protected readonly tools = inject(ToolStore);
   protected readonly desk = inject(DeskStore);
+  protected readonly events = inject(EventStore);
   protected readonly selection = inject(SelectionStore);
   private readonly actions = inject(DeskActions);
   private readonly host = inject(ElementRef).nativeElement as HTMLElement;
@@ -158,6 +163,8 @@ export class Workspace {
    * invisible scrap sitting on the desk.
    */
   private readonly pendingText = signal<Point | null>(null);
+  /** Event whose title is being typed in the overlay, if any. */
+  private readonly editingEventId = signal<string | null>(null);
   /** Select-all on focus (used for freshly created objects). */
   private selectAllOnFocus = false;
 
@@ -168,6 +175,30 @@ export class Workspace {
 
   /** Screen-space geometry and styling of the DOM text editor. */
   protected readonly editor = computed(() => {
+    const eventId = this.editingEventId();
+    if (eventId) {
+      const event = this.events.get(eventId);
+      if (!event) return null;
+      const v = this.viewport.viewport();
+      // Over the day's first chip row, in the chip's own type metrics.
+      const cell = cellRectForDate(event.occurrenceDate ?? event.date);
+      const inset = 10;
+      return {
+        text: event.title,
+        placeholder: 'Event name',
+        left: v.panX + (cell.x + inset) * v.zoom,
+        top: v.panY + (cell.y + 44) * v.zoom,
+        width: (cell.width - 2 * inset) * v.zoom,
+        height: 36 * v.zoom,
+        fontSize: 19 * v.zoom,
+        lineHeight: 24 * v.zoom,
+        padding: 5 * v.zoom,
+        background: 'var(--surface-raised)',
+        color: 'var(--ink-primary)',
+        fontFamily: 'var(--font-ui)',
+      };
+    }
+
     const pending = this.pendingText();
     if (pending) {
       const v = this.viewport.viewport();
@@ -247,6 +278,22 @@ export class Workspace {
       const date = this.desk.flashDate();
       if (this.sceneReady()) this.scene.setFlashDate(date);
     });
+    // Re-expand events for the months on screen. Declared after the viewport
+    // effect so the scene already knows where it is looking, and keyed on the
+    // year span rather than the raw viewport so panning within a year does not
+    // rebuild every month on every frame.
+    effect(() => {
+      const events = this.events.events();
+      this.viewport.viewport();
+      if (!this.sceneReady()) return;
+      const window = this.scene.visibleDateRange();
+      const key = `${window.from.getFullYear()}:${window.to.getFullYear()}`;
+      if (key === this.contentKey && events === this.contentEvents) return;
+      this.contentKey = key;
+      this.contentEvents = events;
+      this.occurrenceIndex.set(this.events.occurrencesByDate(window));
+      this.scene.refreshDayContent();
+    });
     // Focus the editor the moment it exists. A timer would race a fast
     // typist, and every keystroke that lands before focus is swallowed by
     // the global shortcuts instead of the note.
@@ -269,7 +316,7 @@ export class Workspace {
         canvas: this.sceneCanvas().nativeElement,
         width,
         height,
-        dayContent: sampleDayContent,
+        dayContent: (date) => this.dayContentFor(date),
         today: new Date(),
       });
     } catch (error) {
@@ -299,6 +346,42 @@ export class Workspace {
     });
     this.destroyRef.onDestroy(() => themeObserver.disconnect());
   }
+
+  /**
+   * Content for one day cell: real event occurrences, plus the sample tasks,
+   * handwriting and range bars that stand in until those features exist.
+   *
+   * The sample month's own events are deliberately ignored — they were seeded
+   * as real rows on first run, so drawing them from the constant too would
+   * show every one of them twice.
+   */
+  private dayContentFor(date: Date): DayContent | null {
+    const occurrences = this.occurrenceIndex().get(dateKey(date)) ?? [];
+    const sample = sampleDayContent(date);
+    if (!occurrences.length) {
+      if (!sample) return null;
+      const { events: _seeded, ...rest } = sample;
+      return rest;
+    }
+    return {
+      ...(sample ?? {}),
+      events: occurrences.map((occurrence) => ({
+        title: occurrence.event.title,
+        time: occurrence.event.timeLabel,
+        color: occurrence.event.color,
+        variant: occurrence.event.variant,
+        // The repeat glyph marks anything belonging to a series, whether it is
+        // still computed or has been materialised.
+        recurring: !!occurrence.event.rrule || !!occurrence.event.seriesId,
+      })),
+    };
+  }
+
+  /** Occurrences the scene may ask for, grouped by day. */
+  private readonly occurrenceIndex = signal<ReadonlyMap<string, Occurrence[]>>(new Map());
+  /** Guards the rebuild below so panning does not re-expand every series. */
+  private contentKey = '';
+  private contentEvents: unknown = null;
 
   /** Converts a pointer event to world coordinates. */
   private toWorld(event: PointerEvent | MouseEvent): Point {
@@ -375,7 +458,17 @@ export class Workspace {
       if (editable) this.openEditor(hit.id, false);
       return;
     }
-    if (hit?.kind === 'event') return;
+    if (hit?.kind === 'event') {
+      const occurrence = this.storedEventAt(hit);
+      // A computed occurrence has no row to edit yet; changing one has to ask
+      // whether the edit means this date or the whole series, which arrives
+      // with the recurrence UI.
+      if (occurrence && !occurrence.virtual) {
+        this.selectEvent(hit);
+        this.openEventEditor(occurrence.event.id);
+      }
+      return;
+    }
 
     this.openTextDraft(world);
   }
@@ -453,6 +546,16 @@ export class Workspace {
     const text = (event.target as HTMLTextAreaElement).value;
     this.tools.editing.set(false);
 
+    const eventId = this.editingEventId();
+    if (eventId) {
+      this.editingEventId.set(null);
+      const title = text.trim();
+      // An event with no name is nothing; the same rule as an empty text object.
+      if (title) this.events.update(eventId, { title });
+      else this.events.remove(eventId);
+      return;
+    }
+
     const pending = this.pendingText();
     if (pending) {
       this.pendingText.set(null);
@@ -484,6 +587,21 @@ export class Workspace {
   private openEditor(id: string, selectAll: boolean): void {
     this.selectAllOnFocus = selectAll;
     this.editingId.set(id);
+    this.takeKeyboard();
+  }
+
+  /** Creates an untitled event on a day and returns its id. */
+  private createEventOn(date: Date): string {
+    const id = `event${Date.now()}`;
+    this.events.insert({ id, title: '', color: 'blue', date });
+    this.selection.select('event', id);
+    return id;
+  }
+
+  /** Opens the overlay to type an event's title. */
+  private openEventEditor(id: string): void {
+    this.selectAllOnFocus = true;
+    this.editingEventId.set(id);
     this.takeKeyboard();
   }
 
@@ -528,6 +646,14 @@ export class Workspace {
       case 'Task':
         this.openEditor(this.actions.addChecklistSticky(at), true);
         break;
+      case 'Event': {
+        const hit = this.scene.hitTest(world);
+        // An event belongs to a day, so a click off the grid is a miss rather
+        // than a mistake: stay armed and let the user try again on a date.
+        if (hit?.kind !== 'cell') return true;
+        this.openEventEditor(this.createEventOn(hit.date));
+        break;
+      }
       default:
         return false;
     }
@@ -546,11 +672,16 @@ export class Workspace {
 
   /** A clicked calendar chip becomes the inspected event selection. */
   private selectEvent(hit: Extract<SceneHit, { kind: 'event' }>): void {
-    const event = sampleDayContent(hit.date)?.events?.[hit.index];
-    if (!event) return;
+    const occurrence = this.occurrenceIndex().get(dateKey(hit.date))?.[hit.index];
+    if (!occurrence) return;
     this.selection.select('event', hit.id);
-    this.selection.eventTitle.set(event.title);
-    this.selection.eventTime.set(event.time ?? 'All day');
-    this.selection.eventColor.set(`--stationery-${event.color}`);
+    this.selection.eventTitle.set(occurrence.event.title);
+    this.selection.eventTime.set(occurrence.event.timeLabel ?? 'All day');
+    this.selection.eventColor.set(`--stationery-${occurrence.event.color}`);
+  }
+
+  /** The stored event under an event-chip hit, if it has one yet. */
+  private storedEventAt(hit: Extract<SceneHit, { kind: 'event' }>): Occurrence | null {
+    return this.occurrenceIndex().get(dateKey(hit.date))?.[hit.index] ?? null;
   }
 }

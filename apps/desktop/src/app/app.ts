@@ -5,6 +5,7 @@
 
 import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 
+import type { EventRecord } from '@infinite-desk/domain';
 import { DbCommandPalette, type DbPaletteItem } from '@infinite-desk/deskbound';
 
 import { PALETTE_GROUPS } from './data/sample-desk';
@@ -14,6 +15,7 @@ import { Toolbar } from './shell/toolbar';
 import { ToolRail } from './shell/tool-rail';
 import { DeskActions } from './state/desk-actions';
 import { DeskStore } from './state/desk-store';
+import { EventStore } from './state/event-store';
 import { HistoryStore } from './state/history-store';
 import { SelectionStore } from './state/selection-store';
 import { ToolStore } from './state/tool-store';
@@ -29,6 +31,7 @@ const TOOL_KEYS: Record<string, string> = {
   t: 'Text',
   n: 'Sticky note',
   k: 'Task',
+  e: 'Event',
 };
 /** Arrow-key nudge distances in world units (plain / shift). */
 const NUDGE = 16;
@@ -51,6 +54,7 @@ const NUDGE_LARGE = 64;
       (openSearch)="openSearch()"
       (openPalette)="openPalette()"
       (toggleTheme)="dark.set(!dark())"
+      (newEvent)="tools.activate('Event')"
     />
     <app-tool-rail />
     <div style="position:relative;overflow:hidden">
@@ -82,8 +86,9 @@ const NUDGE_LARGE = 64;
 export class App {
   protected readonly selection = inject(SelectionStore);
   private readonly viewport = inject(ViewportStore);
-  private readonly tools = inject(ToolStore);
+  protected readonly tools = inject(ToolStore);
   private readonly desk = inject(DeskStore);
+  private readonly events = inject(EventStore);
   private readonly history = inject(HistoryStore);
   private readonly actions = inject(DeskActions);
 
@@ -116,6 +121,22 @@ export class App {
         floats: () => this.desk.floats(),
         viewport: () => this.viewport.viewport(),
         panTo: (x: number, y: number) => this.viewport.panTo(x, y),
+        events: () => this.events.events(),
+        // Titles the desk resolves for one day, after rule expansion and
+        // override application — the same list the day cell draws.
+        occurrencesOn: (iso: string) => {
+          const day = new Date(iso);
+          const index = this.events.occurrencesByDate({ from: day, to: day });
+          return [...index.values()].flat().map((o) => o.event.title);
+        },
+        addEvent: (event: Record<string, unknown>) =>
+          this.events.insert({
+            ...(event as unknown as EventRecord),
+            date: new Date(event['date'] as string),
+            occurrenceDate: event['occurrenceDate']
+              ? new Date(event['occurrenceDate'] as string)
+              : undefined,
+          }),
         toScreen: (x: number, y: number) => {
           const v = this.viewport.viewport();
           return { x: v.panX + x * v.zoom, y: v.panY + y * v.zoom };

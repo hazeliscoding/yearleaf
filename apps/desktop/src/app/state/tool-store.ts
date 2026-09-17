@@ -23,7 +23,7 @@ export interface ToolSpec {
 }
 
 /** Tools that place an object at the next canvas click. */
-const CREATION_TOOLS = new Set(['Text', 'Sticky note', 'Task']);
+const CREATION_TOOLS = new Set(['Text', 'Sticky note', 'Task', 'Event']);
 
 /** The tool rail layout: tool groups separated by dividers. */
 export const TOOL_GROUPS: readonly (readonly ToolSpec[])[] = [
@@ -33,8 +33,7 @@ export const TOOL_GROUPS: readonly (readonly ToolSpec[])[] = [
     { icon: 'type', label: 'Text', shortcut: 'T' },
     { icon: 'sticky-note', label: 'Sticky note', shortcut: 'N' },
     { icon: 'square-check', label: 'Task', shortcut: 'K' },
-    // Last in the group so the tools that work stay contiguous.
-    { icon: 'calendar-plus', label: 'Event', unavailable: true },
+    { icon: 'calendar-plus', label: 'Event', shortcut: 'E' },
   ],
   [
     { icon: 'pen-line', label: 'Pen', unavailable: true },

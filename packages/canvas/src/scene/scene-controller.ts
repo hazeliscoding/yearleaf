@@ -180,6 +180,27 @@ export class CalendarSceneController {
     this.markDirty();
   }
 
+  /**
+   * Inclusive calendar range currently in view.
+   *
+   * Content providers use this to resolve only what is about to be drawn —
+   * a repeating event is expanded for these months, never for all of time.
+   */
+  visibleDateRange(): { from: Date; to: Date } {
+    const view = this.visibleWorldRect();
+    const first = EPOCH_YEAR + Math.floor(view.y / YEAR_STRIDE_Y);
+    const last = EPOCH_YEAR + Math.floor((view.y + view.height) / YEAR_STRIDE_Y);
+    return { from: new Date(first, 0, 1), to: new Date(last, 11, 31) };
+  }
+
+  /** Rebuilds visible months so a changed day-content provider is re-read. */
+  refreshDayContent(): void {
+    if (!this.app) return;
+    this.rebuildMonths();
+    this.drawInteraction();
+    this.markDirty();
+  }
+
   /** Replaces the desk objects; views diff by object reference. */
   setObjects(objects: readonly DeskObject[]): void {
     if (!this.app) return;

@@ -72,16 +72,28 @@ test('the search overlay wears the same chrome as the command palette', async ({
 
 test('a disabled primary button stays disabled-looking under the cursor', async ({ page }) => {
   await openWorkspace(page);
-  const newEvent = page.getByRole('button', { name: /New event/ });
-  await expect(newEvent).toBeDisabled();
 
-  const resting = await newEvent.evaluate((el) => getComputedStyle(el).backgroundColor);
-  await newEvent.hover({ force: true });
-  const hovered = await newEvent.evaluate((el) => getComputedStyle(el).backgroundColor);
+  // Mounted rather than borrowed from the chrome: this guards the stylesheet
+  // rule, which must hold for every disabled button the app ever grows, not
+  // just whichever one happens to be disabled today.
+  await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.className = 'db-btn db-btn--primary';
+    button.disabled = true;
+    button.textContent = 'Disabled primary';
+    button.style.cssText = 'position:fixed;left:20px;top:200px;z-index:9999';
+    button.id = 'disabled-probe';
+    document.body.append(button);
+  });
+
+  const probe = page.locator('#disabled-probe');
+  const resting = await probe.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await probe.hover({ force: true });
+  const hovered = await probe.evaluate((el) => getComputedStyle(el).backgroundColor);
 
   // `:disabled` and `.db-btn--primary:hover` share specificity, so whichever
-  // rule comes last wins: the button used to fill with accent under the cursor
-  // while still doing nothing.
+  // rule comes last wins: a disabled button used to fill with accent under the
+  // cursor while still doing nothing.
   expect(hovered).toBe(resting);
   expect(hovered).not.toBe('rgb(156, 83, 16)');
 });

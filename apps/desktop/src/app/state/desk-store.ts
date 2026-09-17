@@ -19,7 +19,7 @@ import { INITIAL_FLOATS, INITIAL_LAYERS } from '../data/sample-desk';
 import { DESK_PERSISTENCE } from '../persistence/desk-persistence.token';
 
 /** The single desk of version 1; desk management arrives with schema growth. */
-const DESK_ID = 'default';
+export const DESK_ID = 'default';
 
 @Injectable({ providedIn: 'root' })
 export class DeskStore implements DeskObjectStore {

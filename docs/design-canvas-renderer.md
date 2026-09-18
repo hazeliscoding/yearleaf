@@ -146,8 +146,34 @@ therefore transient gesture state, and writing one note is exactly one undoable 
   fits the focused month; Week centers the focused week row at 0.78; Day centers today's
   cell at 1.6. The displayed tier label derives from `tierForZoom(zoom)` — free panning
   and zooming update it continuously.
-- **Focused month/date** derives from the world point at the viewport center; the date
-  navigator label follows it, giving real month navigation across all of time.
+- **Focused month/date** is the month covering most of the visible rectangle, not the one
+  under the viewport's centre point. The centre of a year block falls on the same
+  row-and-column boundary every time, so a centre-point rule reported a month that was
+  not the one on screen and always chose the same month when a whole year was in view.
+- **Stepping** (navigator arrows, PageUp/PageDown) moves what the navigator names — a
+  month, or a year once no single month covers much of the screen. It keeps the current
+  zoom, and past a whole month it keeps the date rather than a geometric offset, because
+  months start on different weekdays. Framings glide rather than cut, for a duration that
+  follows the distance travelled.
+- **Saying where you are** is split between two marks, because the layout actively
+  misleads rather than merely staying quiet. Months run three across, so the sheet below
+  one is three months on — and a sheet's trailing cells show the *next* month's early
+  dates, so reading downward from September gives "October 8, 9, 10, 11" and then a sheet
+  starting "30 1 2 3", which is December.
+  - The **pinned band** (`scene/pinned-header.ts`) keeps a sheet naming itself once its
+    own printed title is out of sight, vertically or horizontally, with the weekday
+    letters aligned to their columns. It names the sheet that is *unlabelled*, not the one
+    filling the screen.
+  - The **seam** (`scene/seam.ts`) states the relationship a gutter spans rather than
+    naming the sheet across it — naming it would be a smaller copy of a title already
+    ignored. The count of bars is the month distance: three across a horizontal gutter,
+    one down a vertical one. Bars carry no direction, so neighbouring seams cannot
+    contradict each other and the mark stays true read upward. `3 MONTHS` is set twice
+    along each seam for a reader who has stopped; at a row's end a printer's catchword
+    names the month the sequence continues on, hooked back and down, because neither a
+    left arrow (August) nor a diagonal (through paper at November) is honest. The block
+    boundary runs unbroken across all three columns and is the only seam that survives
+    the year tier, the way a county line outlasts street names.
 - **Jumps** (Today, search, palette) center the target cell and flash it via the
   interaction layer.
 - Dev/e2e affordance: `?tier=` and `?theme=` URL parameters apply a preset at startup so

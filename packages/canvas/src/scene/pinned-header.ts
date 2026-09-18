@@ -29,12 +29,9 @@ import {
   monthOrigin,
   type WorldRect,
 } from '../month-layout';
+import { MONTH_NAMES } from './month-names';
 import type { ThemeTokens } from './theme';
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
 const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 /** Height of the band in screen pixels; fixed, so it reads at any zoom. */

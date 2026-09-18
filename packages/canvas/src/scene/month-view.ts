@@ -31,7 +31,9 @@ import {
   type WorldRect,
 } from '../month-layout';
 import type { ZoomTier } from '../viewport';
+import { MONTH_NAMES } from './month-names';
 import { eventChipId, type DayContentProvider } from './scene-types';
+import { drawSeam } from './seam';
 import { mixColors, type ThemeTokens } from './theme';
 
 /** An event chip's hit rect, registered with the spatial index. */
@@ -40,10 +42,6 @@ export interface ChipRegistration {
   readonly rect: WorldRect;
 }
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
 const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 /** Inner padding of a day cell, world units. */
@@ -233,6 +231,9 @@ export function buildMonthView(
       container.addChild(caption);
     }
   }
+
+  // What the gutter below this sheet says about the sheet below it.
+  drawSeam(container, year, monthIndex, tier, theme);
 
   return { container, chips };
 }

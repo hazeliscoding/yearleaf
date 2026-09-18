@@ -36,9 +36,16 @@ declare global {
       events(): readonly EventData[];
       selectEvent(id: string): boolean;
       select(id: string): boolean;
+      viewport(): { panX: number; panY: number; zoom: number };
+      toScreen(x: number, y: number): { x: number; y: number };
     };
   }
 }
+
+const canvas = (page: Page) => page.locator('[data-screen-label="Canvas"]');
+const canvasWidth = async (page: Page) => (await canvas(page).boundingBox())!.width;
+/** Marker that the inspector is showing a desk object. */
+const inspectorShowing = (page: Page) => page.getByLabel('X position', { exact: true });
 
 /** A 4x2 truecolour PNG, the same fixture the import tests drop. */
 const WIDE_PNG_BASE64 =
@@ -95,6 +102,60 @@ async function selectedPicture(page: Page): Promise<FloatData> {
   await expect.poll(() => page.evaluate(() => window.__e2e.floats().length)).toBe(before + 1);
   return (await floats(page)).at(-1)!;
 }
+
+test('selecting something the inspector would cover brings it back into view', async ({ page }) => {
+  await openWorkspace(page);
+  const wide = await canvasWidth(page);
+  const target = (await floats(page))[0];
+  const rightEdge = async () =>
+    (
+      await page.evaluate(
+        ([x, y]) => window.__e2e.toScreen(x, y),
+        [target.x + target.width, target.y],
+      )
+    ).x;
+  const before = await rightEdge();
+
+  await page.evaluate((id) => window.__e2e.select(id), target.id);
+  await expect(inspectorShowing(page)).toBeVisible();
+  await expect.poll(() => canvasWidth(page)).toBeLessThan(wide);
+  const narrow = await canvasWidth(page);
+
+  // The panel is a grid column, so the cell really loses the width and this
+  // object was sitting in the strip it took — left alone it would now be
+  // unreachable, which is how a note placed there vanished and the click
+  // aimed at it afterwards landed on the panel.
+  expect(before).toBeGreaterThan(narrow);
+  expect(await rightEdge()).toBeLessThanOrEqual(narrow);
+});
+
+test('selecting something already clear of the panel does not move the desk', async ({ page }) => {
+  await openWorkspace(page);
+  const wide = await canvasWidth(page);
+
+  // A note in the middle of the desk, nowhere near where the panel opens.
+  await page.keyboard.press('n');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.press('Escape');
+  const created = (await floats(page)).at(-1)!;
+
+  // Let the panel close so the canvas is back to full width.
+  await page.keyboard.press('Escape');
+  await expect(inspectorShowing(page)).toBeHidden();
+  await expect.poll(() => canvasWidth(page)).toBe(wide);
+  const before = await page.evaluate(() => window.__e2e.viewport());
+
+  await page.evaluate((id) => window.__e2e.select(id), created.id);
+  await expect(inspectorShowing(page)).toBeVisible();
+  await expect.poll(() => canvasWidth(page)).toBeLessThan(wide);
+
+  // Nothing was at risk, so nothing moves. Holding the centre instead would
+  // slide the whole desk on every selection, shearing the far column off the
+  // opposite edge to uncover something that was never covered.
+  expect(await page.evaluate(() => window.__e2e.viewport())).toEqual(before);
+});
 
 test('typing a position moves the note it is describing', async ({ page }) => {
   await openWorkspace(page);

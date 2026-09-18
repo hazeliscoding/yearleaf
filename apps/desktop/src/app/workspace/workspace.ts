@@ -67,6 +67,12 @@ const RESIZABLE = new Set(['sticky', 'image', 'text']);
 const HANDLE_RADIUS = 16;
 /** Zoom applied per unit of wheel delta, as an exponent. One notch is ~120. */
 const WHEEL_ZOOM_RATE = 0.0015;
+/**
+ * Screen-pixel gap left around a selection the inspector would have covered,
+ * so an object it uncovers does not sit flush against the panel edge reading
+ * as clipped.
+ */
+const REVEAL_MARGIN = 16;
 
 @Component({
   selector: 'app-workspace',
@@ -371,6 +377,11 @@ export class Workspace {
       if (w > 0 && h > 0) {
         this.scene.resize(w, h);
         this.viewport.setViewSize(w, h);
+        // Opening the inspector is a resize: it is a grid column, so the cell
+        // narrows and the strip it takes stops being reachable. Read the
+        // selection after the new size is recorded, never before.
+        const selected = this.selectedRect();
+        if (selected) this.viewport.revealRect(selected, REVEAL_MARGIN);
       }
     });
     resizeObserver.observe(this.host);
@@ -417,6 +428,25 @@ export class Workspace {
   /** Guards the rebuild below so panning does not re-expand every series. */
   private contentKey = '';
   private contentEvents: unknown = null;
+
+  /**
+   * World rect of whatever is selected, for the reveal above.
+   *
+   * An event chip resolves to its day cell rather than to the chip: the cell
+   * is what the scene lays the chip out inside, and bringing it into view
+   * brings the chip with it.
+   */
+  private selectedRect(): WorldRect | null {
+    const selection = this.selection.selection();
+    if (!selection) return null;
+    if (selection.kind === 'event') {
+      const occurrence = this.selection.occurrence();
+      return occurrence ? cellRectForDate(occurrence.date) : null;
+    }
+    const object = this.desk.get(selection.id);
+    if (!object) return null;
+    return { x: object.x, y: object.y, width: object.width, height: object.height };
+  }
 
   /** Converts a pointer event to world coordinates. */
   private toWorld(event: PointerEvent | MouseEvent): Point {

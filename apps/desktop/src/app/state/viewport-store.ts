@@ -204,6 +204,47 @@ export class ViewportStore {
     }
   }
 
+  /**
+   * Pans the least distance that brings a world rect inside the viewport,
+   * and does nothing at all when it is already there.
+   *
+   * The inspector is a grid column, so selecting something narrows the canvas
+   * cell under a world that does not follow — and whatever was in the strip
+   * the panel took is simply gone, which is how a note placed there vanished
+   * and the click aimed at it afterwards landed on the panel.
+   *
+   * Moving the view by half the lost width instead would hold the centre
+   * still, but it pays on every selection: the desk lurches whether or not
+   * anything was at risk, it shears the far column off the opposite edge, and
+   * it is not enough to uncover an object sitting deep in the strip. Panning
+   * only on occlusion, and only by the shortfall, costs nothing in the common
+   * case and is by construction enough in the rare one.
+   *
+   * A rect larger than the view cannot be satisfied at both edges, so the
+   * near edge wins: the far one was already unreachable.
+   *
+   * Instant rather than glided — this is a layout correction inside the same
+   * visual event as the panel opening, not somewhere the reader asked to go.
+   */
+  revealRect(rect: WorldRect, margin = 0): void {
+    const { width, height } = this.viewSize();
+    const { panX, panY, zoom } = this.state();
+    const left = panX + rect.x * zoom;
+    const top = panY + rect.y * zoom;
+    const right = left + rect.width * zoom;
+    const bottom = top + rect.height * zoom;
+
+    let dx = 0;
+    if (right > width - margin) dx = width - margin - right;
+    if (left + dx < margin) dx = margin - left;
+    let dy = 0;
+    if (bottom > height - margin) dy = height - margin - bottom;
+    if (top + dy < margin) dy = margin - top;
+
+    if (dx === 0 && dy === 0) return;
+    this.state.update((s) => ({ ...s, panX: s.panX + dx, panY: s.panY + dy }));
+  }
+
   /** Translates the viewport by a screen-space delta (gesture; no animation). */
   panByScreen(dx: number, dy: number): void {
     this.stopFlight();

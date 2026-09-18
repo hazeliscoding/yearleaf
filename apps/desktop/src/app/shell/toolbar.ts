@@ -32,7 +32,10 @@ import { ViewportStore, type Tier } from '../state/viewport-store';
     <db-date-navigator
       [label]="viewport.navLabel()"
       [zoomLabel]="viewport.tier()"
+      [unit]="viewport.navUnit()"
       (jump)="openPalette.emit()"
+      (previous)="viewport.step(-1)"
+      (next)="viewport.step(1)"
     />
     <db-segmented
       ariaLabel="Zoom level"

@@ -18,7 +18,31 @@ import { DbKbd } from '../core/kbd';
   },
   template: `
     <db-icon name="calendar" [size]="13" />
-    <span style="font:500 13px var(--font-calendar)">{{ label() }}</span>
+    <!-- Either side of the label, because they move what it names: a month
+         when it reads "September 2026", a year when it reads "2026". The
+         calendar runs three months across, so scrolling is not a substitute —
+         dragging downward from September arrives at December. -->
+    <button
+      class="db-nav-step"
+      type="button"
+      [attr.aria-label]="'Previous ' + unit()"
+      [title]="'Previous ' + unit()"
+      (click)="previous.emit()"
+    >
+      <db-icon name="chevron-left" [size]="14" />
+    </button>
+    <span style="font:500 13px var(--font-calendar);min-width:106px;text-align:center">{{
+      label()
+    }}</span>
+    <button
+      class="db-nav-step"
+      type="button"
+      [attr.aria-label]="'Next ' + unit()"
+      [title]="'Next ' + unit()"
+      (click)="next.emit()"
+    >
+      <db-icon name="chevron-right" [size]="14" />
+    </button>
     <span
       style="font:var(--text-metadata);color:var(--ink-muted);text-transform:uppercase;letter-spacing:var(--tracking-metadata)"
       >{{ zoomLabel() }}</span
@@ -33,6 +57,12 @@ export class DbDateNavigator {
   readonly label = input.required<string>();
   /** Active zoom tier label, e.g. `"Month"`. */
   readonly zoomLabel = input('Month');
+  /** What one step moves, named in the arrows' accessible labels. */
+  readonly unit = input<'month' | 'year'>('month');
   /** Emits when "Jump to date" is clicked. */
   readonly jump = output<void>();
+  /** Emits when the back arrow is used. */
+  readonly previous = output<void>();
+  /** Emits when the forward arrow is used. */
+  readonly next = output<void>();
 }

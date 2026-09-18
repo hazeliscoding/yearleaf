@@ -141,9 +141,73 @@ export function dateForWorldPoint(point: { x: number; y: number }): CellHit | nu
 }
 
 /**
+ * Months elapsed since the epoch month, so stepping is plain addition.
+ *
+ * Moving a month on this plane is not a fixed translation: within a year it
+ * is one column right, then a wrap to the next row's first column, then a
+ * wrap into the next year block entirely. Counting in months and mapping back
+ * keeps every one of those cases in one place.
+ */
+export function monthOrdinal(year: number, monthIndex: number): number {
+  return (year - EPOCH_YEAR) * 12 + monthIndex;
+}
+
+/** The year and month an ordinal names; negatives reach before the epoch. */
+export function monthFromOrdinal(ordinal: number): { year: number; monthIndex: number } {
+  return {
+    year: EPOCH_YEAR + Math.floor(ordinal / 12),
+    monthIndex: ((ordinal % 12) + 12) % 12,
+  };
+}
+
+/**
+ * The month occupying most of a visible rectangle.
+ *
+ * Deliberately not the month under the centre point: the centre of a year
+ * block falls on the same row-and-column boundary every time, so a
+ * centre-point rule reported one month while quite another filled the screen,
+ * and always chose the same month when the whole year was in view.
+ *
+ * Scans at most three year blocks. Past that the viewport holds more calendar
+ * than any single month can meaningfully claim, and the caller is showing a
+ * year rather than a month anyway.
+ */
+export function monthForVisibleRect(rect: WorldRect): { year: number; monthIndex: number } {
+  const firstYearRow = Math.floor(rect.y / YEAR_STRIDE_Y);
+  const lastYearRow = Math.min(
+    Math.floor((rect.y + rect.height) / YEAR_STRIDE_Y),
+    firstYearRow + 2,
+  );
+
+  let best: { year: number; monthIndex: number } | null = null;
+  let bestArea = 0;
+  for (let row = firstYearRow; row <= lastYearRow; row++) {
+    const year = EPOCH_YEAR + row;
+    for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
+      const month = monthRect(year, monthIndex);
+      const overlapW =
+        Math.min(rect.x + rect.width, month.x + month.width) - Math.max(rect.x, month.x);
+      const overlapH =
+        Math.min(rect.y + rect.height, month.y + month.height) - Math.max(rect.y, month.y);
+      if (overlapW <= 0 || overlapH <= 0) continue;
+      const area = overlapW * overlapH;
+      if (area > bestArea) {
+        bestArea = area;
+        best = { year, monthIndex };
+      }
+    }
+  }
+
+  // Nothing of the calendar is in view — the desk east of the columns, say.
+  // The nearest month to the centre is still the honest answer there.
+  return (
+    best ?? monthForWorldPoint({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
+  );
+}
+
+/**
  * The month nearest a world point — always defined, even over gutters and
- * open desk space. Used to derive the focused month from the viewport
- * center for navigation labels and fit presets.
+ * open desk space.
  */
 export function monthForWorldPoint(point: { x: number; y: number }): {
   year: number;

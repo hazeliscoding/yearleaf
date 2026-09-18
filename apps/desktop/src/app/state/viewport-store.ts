@@ -7,16 +7,19 @@
  * arithmetic delegates to `@infinite-desk/canvas`.
  */
 
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, effect, signal } from '@angular/core';
 
 import {
   CELL_H,
   MAX_ZOOM,
   MIN_ZOOM,
+  MONTH_H,
   MONTH_W,
   cellRectForDate,
   fitZoom,
-  monthForWorldPoint,
+  monthForVisibleRect,
+  monthFromOrdinal,
+  monthOrdinal,
   monthOrigin,
   monthRect,
   panBy,
@@ -40,6 +43,8 @@ const MONTH_NAMES = [
 /** Extra world-space margin east of a month kept visible by the month fit,
  * so desk objects parked beside the calendar stay on screen. */
 const MONTH_FIT_MARGIN = 560;
+/** Ratio one press of the zoom widget applies; about six presses per tier. */
+const ZOOM_STEP = 1.25;
 
 @Injectable({ providedIn: 'root' })
 export class ViewportStore {
@@ -60,11 +65,51 @@ export class ViewportStore {
   /** Detail tier derived from the zoom level. */
   readonly tier = computed<Tier>(() => TIER_LABEL[tierForZoom(this.state().zoom)]);
 
-  /** The month under the viewport center — the navigation focus. */
-  readonly focusedMonth = computed(() => {
+  /** The world rectangle currently on screen. */
+  private readonly visibleRect = computed<WorldRect>(() => {
     const { width, height } = this.viewSize();
-    return monthForWorldPoint(screenToWorld(this.state(), { x: width / 2, y: height / 2 }));
+    const state = this.state();
+    const topLeft = screenToWorld(state, { x: 0, y: 0 });
+    const bottomRight = screenToWorld(state, { x: width, y: height });
+    return {
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
+    };
   });
+
+  /** The month most of the screen is showing — the navigation focus. */
+  readonly focusedMonth = computed(() => monthForVisibleRect(this.visibleRect()));
+
+  /**
+   * The month the user was last reading, which is where a Month fit returns.
+   *
+   * Zooming out to look around must not lose your place. At the year tier
+   * every month is on screen at once, so asking which one is focused has no
+   * honest answer — the old centre-point rule always said May, whatever you
+   * had been reading before you zoomed out. So the month is held and only the
+   * year follows, which means panning across years up there and coming back
+   * lands on the same month of the year you moved to.
+   */
+  private readonly detailMonth = signal({
+    year: new Date().getFullYear(),
+    monthIndex: new Date().getMonth(),
+  });
+  private readonly followFocus = effect(() => {
+    const live = this.focusedMonth();
+    if (this.tier() === 'Year') this.detailMonth.update((held) => ({ ...held, year: live.year }));
+    else this.detailMonth.set(live);
+  });
+
+  /**
+   * What the navigator's arrows move, and what its label names.
+   *
+   * They are the same thing on purpose: at the year tier the label reads
+   * "2026" and the arrows step a year, everywhere else it names a month and
+   * they step a month.
+   */
+  readonly navUnit = computed<'month' | 'year'>(() => (this.tier() === 'Year' ? 'year' : 'month'));
 
   /** Date-navigator label for the current tier and focus. */
   readonly navLabel = computed(() => {
@@ -111,14 +156,21 @@ export class ViewportStore {
     this.state.update((s) => zoomAroundPoint(s, focus, factor, MIN_ZOOM, MAX_ZOOM));
   }
 
-  /** Steps zoom from the zoom widget, keeping the center fixed. */
-  zoomStep(delta: number): void {
+  /**
+   * Steps zoom from the zoom widget, keeping the centre fixed.
+   *
+   * By a ratio, not by a fixed amount. Adding a constant makes the control
+   * behave differently at every scale — a tenth is a fifth of the way in at
+   * the month tier and a twentieth of the way at the day tier, so six presses
+   * in covered the range that three presses out then undid twice over.
+   */
+  zoomStep(direction: 1 | -1): void {
     this.animate.set(true);
     const { width, height } = this.viewSize();
-    this.state.update((s) => {
-      const target = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, s.zoom + delta));
-      return zoomAroundPoint(s, { x: width / 2, y: height / 2 }, target / s.zoom, MIN_ZOOM, MAX_ZOOM);
-    });
+    const factor = direction > 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+    this.state.update((s) =>
+      zoomAroundPoint(s, { x: width / 2, y: height / 2 }, factor, MIN_ZOOM, MAX_ZOOM),
+    );
   }
 
   /**
@@ -127,9 +179,11 @@ export class ViewportStore {
    * cell when today lies within it).
    */
   fitTier(tier: Tier, anchorDate?: Date): void {
+    // Without an anchor the preset returns to the month last read closely,
+    // not to whatever the current framing happens to centre on.
     const focus = anchorDate
       ? { year: anchorDate.getFullYear(), monthIndex: anchorDate.getMonth() }
-      : this.focusedMonth();
+      : this.detailMonth();
     const today = new Date();
     const anchor =
       anchorDate ??
@@ -155,6 +209,34 @@ export class ViewportStore {
         break;
       }
     }
+  }
+
+  /**
+   * Moves one step forward or back through time, keeping the zoom.
+   *
+   * The step is a month, or a year at the year tier — see {@link navUnit}.
+   * Scrolling is no substitute: months run three across, so dragging downward
+   * from September arrives at December, and a reader who does this for a
+   * living mistook that for the weekday columns being wrong.
+   *
+   * Where you were inside the month is carried over rather than the month
+   * being re-framed, so stepping on from the last week of one month arrives at
+   * the last week of the next instead of jumping back to the middle.
+   */
+  step(delta: number): void {
+    const from = this.detailMonth();
+    const months = this.navUnit() === 'year' ? delta * 12 : delta;
+    const to = monthFromOrdinal(monthOrdinal(from.year, from.monthIndex) + months);
+
+    const origin = monthOrigin(from.year, from.monthIndex);
+    const center = this.centerWorld();
+    const clamp = (v: number, hi: number) => Math.min(hi, Math.max(0, v));
+    const withinX = clamp(center.x - origin.x, MONTH_W);
+    const withinY = clamp(center.y - origin.y, MONTH_H);
+
+    const target = monthOrigin(to.year, to.monthIndex);
+    this.detailMonth.set(to);
+    this.centerOn({ x: target.x + withinX, y: target.y + withinY }, this.state().zoom);
   }
 
   /** Fits a specific month (plus its desk margin) into the viewport. */

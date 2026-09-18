@@ -281,6 +281,14 @@ export class App {
       this.tools.spaceHeld.set(true);
       return;
     }
+    // The pointerless route to the next month. Arrow keys are spoken for by
+    // nudging a selected object, and these are what a calendar is expected to
+    // answer to anyway.
+    if (event.key === 'PageDown' || event.key === 'PageUp') {
+      event.preventDefault();
+      this.viewport.step(event.key === 'PageDown' ? 1 : -1);
+      return;
+    }
 
     const selected = this.selection.selection();
     const selectedObject = selected && selected.kind !== 'event' ? selected.id : null;

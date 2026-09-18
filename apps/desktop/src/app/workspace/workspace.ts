@@ -65,6 +65,8 @@ interface ResizeState {
 const RESIZABLE = new Set(['sticky', 'image', 'text']);
 /** Screen-pixel radius around the southeast handle that starts a resize. */
 const HANDLE_RADIUS = 16;
+/** Zoom applied per unit of wheel delta, as an exponent. One notch is ~120. */
+const WHEEL_ZOOM_RATE = 0.0015;
 
 @Component({
   selector: 'app-workspace',
@@ -121,8 +123,8 @@ const HANDLE_RADIUS = 16;
     <div style="position:absolute;left:20px;bottom:16px">
       <db-zoom-control
         [zoom]="viewport.zoomPercent()"
-        (zoomIn)="viewport.zoomStep(0.1)"
-        (zoomOut)="viewport.zoomStep(-0.1)"
+        (zoomIn)="viewport.zoomStep(1)"
+        (zoomOut)="viewport.zoomStep(-1)"
         (fitMonth)="viewport.fitTier('Month')"
         (fitYear)="viewport.fitTier('Year')"
       />
@@ -566,9 +568,13 @@ export class Workspace {
     event.preventDefault();
     if (event.ctrlKey || event.metaKey) {
       const rect = this.host.getBoundingClientRect();
+      // Exponential in the wheel delta, so one notch out exactly undoes one
+      // notch in, at any scale. The factor used to be linear in the delta,
+      // which is not merely uneven: a notch reports about 120, so zooming out
+      // asked for a factor of -0.2 and landed on the minimum zoom every time.
       this.viewport.zoomAt(
         { x: event.clientX - rect.left, y: event.clientY - rect.top },
-        1 - event.deltaY * 0.01,
+        Math.exp(-event.deltaY * WHEEL_ZOOM_RATE),
       );
     } else {
       this.viewport.panByScreen(-event.deltaX, -event.deltaY);

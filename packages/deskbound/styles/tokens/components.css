@@ -17,6 +17,11 @@
    nothing" state the variants are meant to signal against. */
 .db-btn:disabled,.db-btn:disabled:hover,.db-btn:disabled:active{color:var(--ink-disabled);background:var(--surface-paper);border-color:var(--divider);cursor:default}
 .db-btn--sm{height:var(--control-h-sm);padding:0 8px;font-size:11.5px}
+/* Square rather than the pill a labelled button wears: these carry a glyph
+   only, and 24px keeps the target reachable without crowding the label they
+   sit either side of. */
+.db-nav-step{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;color:var(--ink-secondary);background:transparent;border:1px solid transparent;border-radius:var(--radius-subtle);cursor:pointer;transition:background var(--motion-fast) var(--ease-out)}
+.db-nav-step:hover{background:var(--hover);color:var(--ink-primary)}
 .db-btn--lg{height:var(--control-h-lg);padding:0 16px;font-size:13px}
 .db-btn--icon{width:var(--control-h);padding:0}
 .db-btn svg{width:var(--icon-sm);height:var(--icon-sm);stroke-width:1.5}

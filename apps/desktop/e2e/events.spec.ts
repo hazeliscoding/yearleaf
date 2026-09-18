@@ -143,8 +143,9 @@ test('the Enter that confirms an IME candidate does not commit the title', async
   await expect(editor).toBeFocused();
 
   // A real composition in the box, driven through the same CDP input path the
-  // browser uses for a CJK IME. Chromium then reports `isComposing` on a real
-  // keypress, so the Enter below is genuine rather than synthesised.
+  // browser uses for a CJK IME, so Chromium reports `isComposing` on the
+  // ordinary keypress below. That covers the browser's composition state; it
+  // is not a native IME session, and says nothing about candidate selection.
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.imeSetComposition', {
     text: 'かいぎ',
@@ -173,6 +174,42 @@ test('the Enter that confirms an IME candidate does not commit the title', async
   const after = await events(page);
   expect(after.length).toBe(before + 1);
   expect(after.at(-1)!.title).toBe('会議');
+});
+
+test('an Enter carrying only the legacy IME keyCode is not a commit either', async ({ page }) => {
+  await openWorkspace(page);
+  const before = (await events(page)).length;
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  const editor = page.getByLabel('Edit text');
+  await expect(editor).toBeFocused();
+  await page.keyboard.type('kaigi');
+
+  // The CDP composition above cannot reach this branch: Chromium sends that
+  // Enter as `isComposing: true, keyCode: 13`, so the 229 fallback could be
+  // deleted with every other test still green. keyCode 229 is what a browser
+  // reports for a key an input method owns, and the browsers that lean on it
+  // are the ones that leave `isComposing` unset. Reaching it without an IME
+  // installed on the machine running this suite means dispatching the event,
+  // so what this pins is that the handler still consults keyCode — not how
+  // any particular input method behaves.
+  const notCancelled = await page.evaluate(() =>
+    document.querySelector('textarea')!.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Enter',
+        keyCode: 229,
+        bubbles: true,
+        cancelable: true,
+      }),
+    ),
+  );
+
+  // The handler returned before `preventDefault`, so nothing cancelled it.
+  expect(notCancelled).toBe(true);
+  await expect(editor).toBeFocused();
+  expect((await events(page)).length).toBe(before);
 });
 
 test('a weekly series is stored once and drawn on every matching date', async ({ page }) => {

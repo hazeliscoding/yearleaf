@@ -1,16 +1,16 @@
 /**
  * The lived-in September 2026 sample desk from the design reference.
  *
- * This seeds the first milestone (there is no SQLite adapter yet); it is
- * deliberately dense so canvas work is exercised against realistic content,
- * per the testing strategy's "lived-in desks" requirement.
+ * Seed material for a desk that has none: deliberately dense, so canvas work
+ * is exercised against realistic content per the testing strategy's
+ * "lived-in desks" requirement. Everything here becomes a real, editable row
+ * on first run, or it is not drawn — what the desk shows and what the desk
+ * holds are the same thing.
  */
 
 import { MONTH_STRIDE_X, monthOrigin, type DayContent } from '@infinite-desk/canvas';
 import type { DeskObject } from '@infinite-desk/domain';
 import type { DbPaletteGroup } from '@infinite-desk/deskbound';
-
-export type { DayContent };
 
 /** World origin of the sample month (September 2026). */
 const SEPT = monthOrigin(2026, 8);
@@ -18,15 +18,15 @@ const SEPT = monthOrigin(2026, 8);
 const DESK_X = 3 * MONTH_STRIDE_X + 80;
 
 /**
- * Day-content provider for the scene: the lived-in September 2026 sample.
- * Every other month renders as empty paper.
+ * Day-of-month → seed content for September 2026.
+ *
+ * Only `events` is read: {@link EventStore} turns it into real, editable rows
+ * on a desk that has none. The `tasks`, `range`, `hand` and `img` entries are
+ * kept as the demo desk they describe, for when those object types are real
+ * enough to be seeded the same way — they are no longer drawn. Merging them
+ * over the cells put handwriting and taped photos on a user's September that
+ * nothing had created and nothing could remove.
  */
-export function sampleDayContent(date: Date): DayContent | null {
-  if (date.getFullYear() !== 2026 || date.getMonth() !== 8) return null;
-  return MONTH_CONTENT[date.getDate()] ?? null;
-}
-
-/** Day-of-month → cell content for September 2026. */
 export const MONTH_CONTENT: Readonly<Record<number, DayContent>> = {
   1: { tasks: [{ label: 'Pay electric bill', due: '1st' }] },
   2: { events: [{ time: '10:00', title: 'Studio day', color: 'violet' }] },

@@ -35,7 +35,6 @@ import {
 import { dateKey, type Occurrence } from '@infinite-desk/domain';
 import { DbZoomControl } from '@infinite-desk/deskbound';
 
-import { sampleDayContent } from '../data/sample-desk';
 import { AttachmentStore, MAX_ATTACHMENT_BYTES } from '../persistence/attachments';
 import { DeskActions } from '../state/desk-actions';
 import { DeskStore } from '../state/desk-store';
@@ -361,7 +360,10 @@ export class Workspace {
     const bridge = (globalThis as unknown as Record<string, unknown>)['__e2e'] as
       | Record<string, unknown>
       | undefined;
-    if (bridge) bridge['pinnedMonth'] = () => this.scene.pinnedMonth;
+    if (bridge) {
+      bridge['pinnedMonth'] = () => this.scene.pinnedMonth;
+      bridge['dayContent'] = (iso: string) => this.dayContentFor(new Date(iso));
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       const w = this.host.clientWidth;
@@ -384,23 +386,20 @@ export class Workspace {
   }
 
   /**
-   * Content for one day cell: real event occurrences, plus the sample tasks,
-   * handwriting and range bars that stand in until those features exist.
+   * Content for one day cell: the event occurrences the desk actually holds.
    *
-   * The sample month's own events are deliberately ignored — they were seeded
-   * as real rows on first run, so drawing them from the constant too would
-   * show every one of them twice.
+   * Nothing else is drawn here. The sample month used to merge its tasks,
+   * handwriting, taped photos and range bars over every September 2026 cell,
+   * and once events became real rows those stand-ins were the only content on
+   * the desk that no tool created, no gesture edited and no key deleted —
+   * indistinguishable, to the person looking at it, from something they had
+   * written themselves. They are seed material for when those object types
+   * exist, not a stand-in to render in the meantime.
    */
   private dayContentFor(date: Date): DayContent | null {
     const occurrences = this.occurrenceIndex().get(dateKey(date)) ?? [];
-    const sample = sampleDayContent(date);
-    if (!occurrences.length) {
-      if (!sample) return null;
-      const { events: _seeded, ...rest } = sample;
-      return rest;
-    }
+    if (!occurrences.length) return null;
     return {
-      ...(sample ?? {}),
       events: occurrences.map((occurrence) => ({
         title: occurrence.event.title,
         time: occurrence.event.timeLabel,

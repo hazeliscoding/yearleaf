@@ -33,6 +33,13 @@ declare global {
       floats(): readonly FloatData[];
       viewport(): { panX: number; panY: number; zoom: number };
       panTo(x: number, y: number): void;
+      dayContent(iso: string): {
+        events?: readonly unknown[];
+        tasks?: readonly unknown[];
+        range?: unknown;
+        hand?: string;
+        img?: string;
+      } | null;
       toScreen(x: number, y: number): { x: number; y: number };
     };
   }
@@ -189,4 +196,25 @@ test('Enter opens a new line where lines are the content', async ({ page }) => {
 
   const items = (await floats(page)).find((f) => f.id === sticky!.id)!.payload.items!;
   expect(items.map((i) => i.label)).toEqual([...labels, 'buy stamps']);
+});
+
+test('a day cell draws nothing the desk does not actually hold', async ({ page }) => {
+  await openWorkspace(page);
+  const dayContent = (iso: string) => page.evaluate((d) => window.__e2e.dayContent(d), iso);
+
+  // The 3rd carried a handwritten "call Mom" and the 5th a taped photo, both
+  // invented by the sample month. Nothing creates them, nothing edits them and
+  // nothing can delete them, so on a real desk they were somebody else's
+  // handwriting appearing in September and staying there.
+  expect(await dayContent('2026-09-03T00:00:00')).toBeNull();
+  expect(await dayContent('2026-09-05T00:00:00')).toBeNull();
+
+  // The 15th has a real, stored event. It used to arrive with a sample task
+  // merged alongside it, which is the same ghost wearing a real day's clothes.
+  const fifteenth = (await dayContent('2026-09-15T00:00:00'))!;
+  expect(fifteenth.events?.length).toBeGreaterThan(0);
+  expect(fifteenth.tasks).toBeUndefined();
+  expect(fifteenth.hand).toBeUndefined();
+  expect(fifteenth.img).toBeUndefined();
+  expect(fifteenth.range).toBeUndefined();
 });

@@ -13,6 +13,8 @@ interface FloatData {
   readonly id: string;
   readonly x: number;
   readonly y: number;
+  readonly width: number;
+  readonly height: number;
   readonly rotation: number;
   readonly payload: {
     readonly kind: string;
@@ -211,6 +213,48 @@ test('a selection hanging off the bottom is left exactly where it is', async ({ 
   // top 39px, so the one thing you just selected becomes the one thing you
   // cannot read.
   expect((await page.evaluate(() => window.__e2e.viewport())).panY).toBe(before.panY);
+});
+
+test('pressing an object the panel will cover does not drag it sideways', async ({ page }) => {
+  await openWorkspace(page);
+  const target = (await floats(page))[0];
+  const box = (await canvas(page).boundingBox())!;
+
+  // Park it inside the strip the panel is about to take, so pressing it both
+  // selects it and makes it a reveal candidate.
+  const v = await page.evaluate(() => window.__e2e.viewport());
+  await page.evaluate(
+    ([px, py]) => window.__e2e.panTo(px, py),
+    [box.width - 120 - target.x * v.zoom, v.panY],
+  );
+  const at = await page.evaluate(
+    ([x, y]) => window.__e2e.toScreen(x, y),
+    [target.x + target.width / 2, target.y + target.height / 2],
+  );
+
+  // A real press, a 1px twitch, a release. The bridge-driven selections in
+  // the tests above never touch this path, which is why it went unnoticed:
+  // the grab offset is recorded in world units at pointer-down, so a reveal
+  // between down and move re-bases the coordinates under an anchor that was
+  // measured against the old ones, and pointer-up commits the difference.
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + at.x, box.y + at.y + 1);
+  await page.mouse.up();
+
+  const after = (await floats(page)).find((f) => f.id === target.id)!;
+  expect(Math.abs(after.x - target.x)).toBeLessThan(4);
+
+  // Held back, not dropped: the reveal it was owed arrives once the hand is
+  // off the desk, which is the only moment it is both safe and still wanted.
+  const narrow = await canvasWidth(page);
+  const rightEdge = (
+    await page.evaluate(
+      ([x, y]) => window.__e2e.toScreen(x, y),
+      [after.x + after.width, after.y],
+    )
+  ).x;
+  expect(rightEdge).toBeLessThanOrEqual(narrow);
 });
 
 test('typing a position moves the note it is describing', async ({ page }) => {

@@ -455,9 +455,19 @@ export class Workspace {
    * reader actually asked to go, and the tick that follows captures its
    * endpoints from launch, so a pan applied here would be overwritten a frame
    * later anyway — visible only as a lurch and a snap back.
+   *
+   * Skipped under a live gesture for a harder reason than courtesy. A drag's
+   * grab offset is recorded in world units at pointer-down; panning between
+   * that and the first move re-bases the coordinates underneath it, so the
+   * object leaps by the width of the pan and pointer-up commits the leap as
+   * an ordinary move. Pressing a note the panel was about to cover shifted it
+   * 611 world units without the pointer travelling horizontally at all. The
+   * gesture ends by calling this again, which is when the correction is both
+   * safe and still wanted.
    */
   private revealSelection(): void {
     if (this.viewport.flying()) return;
+    if (this.drag || this.resizeGesture || this.pan) return;
     const selected = this.selectedRect();
     if (selected) this.viewport.revealHorizontally(selected, REVEAL_MARGIN);
   }
@@ -727,6 +737,10 @@ export class Workspace {
     this.transientRect = null;
     this.pan = null;
     if (this.tools.panning()) this.tools.panning.set(false);
+    // The press that opened the inspector had its reveal held back until the
+    // hand came off the desk. This is that moment, and the object may well
+    // still be under the panel.
+    this.revealSelection();
   }
 
   /**

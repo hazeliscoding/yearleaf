@@ -34,14 +34,34 @@ export function resolveCaps(keys: readonly string[], mod: string): readonly stri
   return keys.map((key) => (key === MOD ? mod : key));
 }
 
+/** `true` when `cap` is a bare glyph rather than a spelled-out word. */
+function isGlyph(cap: string): boolean {
+  return cap.length > 0 && !/[\p{L}\p{N}]/u.test(cap);
+}
+
+/** `true` when `hint` names one cap, e.g. `"V"` rather than `"Mod+Z"`. */
+export function isSingleCap(hint: string): boolean {
+  return !hint.includes('+');
+}
+
 /**
  * Resolves a one-line hint written as `+`-separated logical caps, e.g.
- * `"Mod+Z"`. macOS sets its glyphs tight against the key (`⌘Z`); a
- * spelled-out modifier keeps the separator, because `CtrlZ` reads as one
- * unfamiliar key rather than two familiar ones.
+ * `"Mod+Z"`.
+ *
+ * Each separator is decided by the cap on its left, not by the platform: a
+ * glyph sets tight against what follows (`⌘Z`) and a spelled-out cap keeps
+ * the `+` (`Ctrl+Z`, `Shift+Z`), because `CtrlZ` reads as one unfamiliar key
+ * rather than two familiar ones. Taking that decision once for the whole
+ * join asks the wrong question — it drops the separator from every pair the
+ * moment the platform is macOS, so `Shift+Z` becomes `ShiftZ` on a chord the
+ * modifier only passes through.
  */
 export function resolveHint(hint: string, mod: string): string {
-  return resolveCaps(hint.split('+'), mod).join(mod === MAC_MOD ? '' : '+');
+  const caps = resolveCaps(hint.split('+'), mod);
+  return caps.reduce(
+    (line, cap, index) => (index === 0 ? cap : line + (isGlyph(caps[index - 1]) ? '' : '+') + cap),
+    '',
+  );
 }
 
 /** The platform this webview is running on; `''` when it will not say. */

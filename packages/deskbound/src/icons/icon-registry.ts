@@ -5,6 +5,11 @@
  * Only the icons the product actually renders are imported, keeping the
  * bundle tree-shaken. Lucide is a flagged substitution in the design
  * brief — swap this registry when a custom icon set exists.
+ *
+ * Lucide's `command` is deliberately absent: it draws the ⌘ loop as a path,
+ * which named a key Windows keyboards do not have while sitting on the same
+ * toolbar row as a `Ctrl` keycap that contradicted it. Leaving it out of the
+ * registry makes that a compile error rather than a thing to remember.
  */
 
 import {
@@ -15,7 +20,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Command,
   Eraser,
   Eye,
   EyeOff,
@@ -30,6 +34,7 @@ import {
   Lasso,
   Layers2,
   Link2,
+  List,
   Lock,
   Minus,
   Moon,
@@ -64,7 +69,6 @@ const ICONS = {
   'chevron-down': ChevronDown,
   'chevron-left': ChevronLeft,
   'chevron-right': ChevronRight,
-  'command': Command,
   'eraser': Eraser,
   'eye': Eye,
   'eye-off': EyeOff,
@@ -79,6 +83,7 @@ const ICONS = {
   'lasso': Lasso,
   'layers-2': Layers2,
   'link-2': Link2,
+  'list': List,
   'lock': Lock,
   'minus': Minus,
   'moon': Moon,

@@ -49,7 +49,7 @@ import { ViewportStore, type Tier } from '../state/viewport-store';
         style="width:230px;pointer-events:none"
       />
     </div>
-    <button db-button variant="subtle" icon="command" (click)="openPalette.emit(); $event.stopPropagation()">
+    <button db-button variant="subtle" icon="list" (click)="openPalette.emit(); $event.stopPropagation()">
       Commands
     </button>
     <button

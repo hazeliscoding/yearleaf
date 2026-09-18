@@ -39,5 +39,6 @@ GEMINI.md
 .copilot/
 .github/copilot-instructions.md
 .mcp.json
+.playwright-mcp/
 .codeium/
 .continue/

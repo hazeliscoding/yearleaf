@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MOD, modifierCap, resolveCaps, resolveHint } from './platform';
+import { MOD, isSingleCap, modifierCap, resolveCaps, resolveHint } from './platform';
 
 describe('modifierCap', () => {
   it('prints the command glyph on macOS', () => {
@@ -40,8 +40,28 @@ describe('resolveHint', () => {
     expect(resolveHint('Mod+Z', 'Ctrl')).toBe('Ctrl+Z');
   });
 
+  it('decides each separator from the cap on its left, not from the platform', () => {
+    // The trap: one decision taken once for the whole join reads the platform
+    // instead of the caps, so every separator disappears on macOS and a hint
+    // that merely passes *through* the modifier loses its plus as well.
+    // `Shift` is not a logical token yet and passes through verbatim; what has
+    // to survive is the separator around it.
+    expect(resolveHint('Mod+Shift+Z', '⌘')).toBe('⌘Shift+Z');
+    expect(resolveHint('Mod+Shift+Z', 'Ctrl')).toBe('Ctrl+Shift+Z');
+    expect(resolveHint('Shift+Z', '⌘')).toBe('Shift+Z');
+    expect(resolveHint('Shift+Z', 'Ctrl')).toBe('Shift+Z');
+  });
+
   it('leaves a single-key hint alone', () => {
     expect(resolveHint('V', 'Ctrl')).toBe('V');
     expect(resolveHint('V', '⌘')).toBe('V');
+  });
+});
+
+describe('isSingleCap', () => {
+  it('separates a bare key from a chord', () => {
+    expect(isSingleCap('V')).toBe(true);
+    expect(isSingleCap('Mod+Z')).toBe(false);
+    expect(isSingleCap('Mod+Shift+Z')).toBe(false);
   });
 });

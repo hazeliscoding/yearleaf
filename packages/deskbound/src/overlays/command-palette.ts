@@ -1,5 +1,6 @@
 /**
- * `<db-command-palette>` — ⌘K palette with grouped, keyboard-hinted results.
+ * `<db-command-palette>` — the Mod+K palette, with grouped, keyboard-hinted
+ * results.
  */
 
 import {
@@ -54,7 +55,7 @@ export interface DbPaletteGroup {
   },
   template: `
     <div class="db-palette-input">
-      <db-icon name="command" [size]="15" />
+      <db-icon name="list" [size]="15" />
       <input
         #queryInput
         [value]="query()"

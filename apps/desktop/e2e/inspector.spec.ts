@@ -323,6 +323,9 @@ test('a reveal a glide declined is not left owed to the next click', async ({ pa
   // Navigate while still holding, and let go into the glide. The retry
   // declines, because a flight is somewhere the reader actually asked to go.
   await page.keyboard.press('PageDown');
+  // There must really be a flight to decline: reduced motion, or a glide that
+  // has already landed, would let this pass without reaching the branch.
+  await expect.poll(() => page.evaluate(() => window.__e2e.flying())).toBe(true);
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => window.__e2e.flying())).toBe(false);
   const before = await page.evaluate(() => window.__e2e.viewport());

@@ -172,14 +172,22 @@ export interface SearchEntry {
   readonly kw: string;
 }
 
-/** Static search index over the sample desk (events, notes, OCR, files). */
+/**
+ * Static search index over the sample desk (events, notes, OCR, files).
+ *
+ * A sample index, but never a sample *result*: the overlay lists every row
+ * before a character is typed, and picking one flies the desk to the day it
+ * names. A row for something the desk does not hold is therefore not scenery —
+ * it is a search hit landing on an empty cell, reached through the one tool a
+ * person opens when they are already certain something is there. The Kyoto
+ * range bar and the Sep 23 handwriting became exactly that once cells stopped
+ * drawing them, so they are out until those object types are real.
+ */
 export const SEARCH_INDEX: readonly SearchEntry[] = [
   { label: 'Dentist — Dr. Okada', meta: 'Tue Sep 15 · 14:00', dot: 'var(--stationery-teal)', day: 15, kw: 'dentist okada appointment' },
   { label: 'Zine deadline', meta: 'Fri Sep 11 · all day', dot: 'var(--stationery-red)', day: 11, kw: 'zine deadline print' },
-  { label: 'Kyoto trip', meta: 'Sep 17–19', dot: 'var(--stationery-teal)', day: 17, kw: 'kyoto trip travel japan' },
   { label: 'Print fair opening', meta: 'Fri Sep 25 · 19:30', dot: 'var(--stationery-rose)', day: 25, kw: 'print fair opening' },
   { label: '“call the framer about the print — thu?”', meta: 'Sticky note · OCR', dot: 'var(--stationery-yellow)', day: 24, kw: 'framer print sticky call' },
-  { label: '“don’t schedule anything here”', meta: 'Handwriting · Sep 23', dot: 'var(--stationery-olive)', day: 23, kw: 'schedule handwriting note dont' },
   { label: 'Fair-floorplan.pdf', meta: 'Attachment · 1.2 MB', dot: 'var(--stationery-indigo)', day: 25, kw: 'fair floorplan pdf file' },
   { label: 'Anniversary', meta: 'Fri Sep 18', dot: 'var(--stationery-coral)', day: 18, kw: 'anniversary flowers' },
   { label: 'Concert — Nils Frahm', meta: 'Thu Sep 10 · 20:00', dot: 'var(--stationery-rose)', day: 10, kw: 'concert music nils frahm' },
@@ -206,7 +214,9 @@ export const PALETTE_GROUPS: readonly DbPaletteGroup[] = [
   },
   {
     label: 'Recent',
-    items: [{ icon: 'history', label: 'Jump to Kyoto trip', meta: 'Sep 17–19' }],
+    // Names an event rather than the retired Kyoto range: this row flies the
+    // desk to the day it names, and there is nothing on the 17th to land on.
+    items: [{ icon: 'history', label: 'Jump to Zine deadline', meta: 'Fri Sep 11' }],
   },
 ];
 

@@ -244,8 +244,8 @@ export class App {
       case 'October 2026':
         this.viewport.fitMonthOf(2026, 9);
         break;
-      case 'Jump to Kyoto trip':
-        this.jumpToSeptemberDay(17);
+      case 'Jump to Zine deadline':
+        this.jumpToSeptemberDay(11);
         break;
       case 'New sticky note':
         this.actions.addSticky(this.viewport.centerWorld(), true);

@@ -4,8 +4,15 @@
  *
  * - `year`  — title, weekend/outside tints, density dots for days with content
  * - `month` — numerals, today stamp, event/task chips, ranges, handwriting, photos
- * - `week`  — month detail + event metadata lines
+ * - `week`  — month detail, plus a second line per event carrying its `meta`
  * - `day`   — same as week (glyph emphasis is a later refinement)
+ *
+ * The `week` and `day` rungs are drawn but unreachable in the shipped app:
+ * nothing populates `meta` any more, so `showMeta` finds nothing to show and
+ * all three of these tiers render an identical composition at three scales.
+ * `EventRecord` has no `meta` field — the sample month's strings stopped being
+ * read when events became real rows. Whoever gives events their metadata back
+ * gets the tier ladder back with it.
  */
 
 import { Container, Graphics, Text } from 'pixi.js';

@@ -66,3 +66,4 @@ describe('DeskStore persistence', () => {
     expect((await persistence.loadDesk('default'))?.objects).toEqual([]);
   });
 });
+

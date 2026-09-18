@@ -8,7 +8,7 @@
 
 import { MONTH_STRIDE_X, monthOrigin, type DayContent } from '@infinite-desk/canvas';
 import type { DeskObject } from '@infinite-desk/domain';
-import type { DbLayer, DbPaletteGroup } from '@infinite-desk/deskbound';
+import type { DbPaletteGroup } from '@infinite-desk/deskbound';
 
 export type { DayContent };
 
@@ -158,15 +158,6 @@ export const INITIAL_FLOATS: readonly DeskObject[] = [
   },
 ];
 
-/** Layer rows for the floating layer panel. */
-export const INITIAL_LAYERS: readonly DbLayer[] = [
-  { name: 'Work', color: 'indigo' },
-  { name: 'Personal', color: 'coral' },
-  { name: 'Notes', color: 'yellow' },
-  { name: 'Handwriting', color: 'olive', locked: true },
-  { name: 'Photos', color: 'teal', visible: false },
-];
-
 /** One row of the universal search index. */
 export interface SearchEntry {
   /** Result label. */
@@ -211,7 +202,6 @@ export const PALETTE_GROUPS: readonly DbPaletteGroup[] = [
       { icon: 'sticky-note', label: 'New sticky note', shortcut: ['N'] },
       { icon: 'calendar-plus', label: 'New event', shortcut: ['E'] },
       { icon: 'zoom-in', label: 'Fit month', shortcut: ['⇧', '1'] },
-      { icon: 'layers-2', label: 'Toggle layer: Photos' },
     ],
   },
   {

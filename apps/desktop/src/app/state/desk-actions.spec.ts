@@ -2,13 +2,25 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { IMAGE_CAPTION_HEIGHT } from '@infinite-desk/canvas';
-import type { DeskObject, StickyPayload } from '@infinite-desk/domain';
+import type { DeskObject, ImagePayload, StickyPayload } from '@infinite-desk/domain';
 import { InMemoryDeskPersistence } from '@infinite-desk/persistence';
 
 import { DESK_PERSISTENCE } from '../persistence/desk-persistence.token';
 import { DeskActions } from './desk-actions';
 import { DeskStore } from './desk-store';
 import { HistoryStore } from './history-store';
+
+function photo(): DeskObject {
+  return {
+    id: 'photo',
+    x: 40,
+    y: 60,
+    width: 320,
+    height: 214,
+    rotation: -2.5,
+    payload: { kind: 'image', frame: 'taped', caption: '', attachmentId: 'a' },
+  };
+}
 
 function checklistSticky(): DeskObject {
   return {
@@ -30,6 +42,7 @@ function checklistSticky(): DeskObject {
 describe('DeskActions object creation', () => {
   let store: DeskStore;
   let actions: DeskActions;
+  let history: HistoryStore;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -37,6 +50,7 @@ describe('DeskActions object creation', () => {
     });
     store = TestBed.inject(DeskStore);
     actions = TestBed.inject(DeskActions);
+    history = TestBed.inject(HistoryStore);
   });
 
   it('centres a sticky on the requested point', () => {
@@ -78,6 +92,20 @@ describe('DeskActions object creation', () => {
 
     actions.setImageCaption(id, '');
     expect(store.get(id)!.height).toBe(before.height);
+  });
+
+  it('takes the caption and the band it needed back in one undo', () => {
+    const id = actions.addImage({ x: 0, y: 0 }, 'a', 1.5);
+    const before = store.get(id)!;
+
+    actions.setImageCaption(id, 'beach, august');
+    history.undo();
+
+    const restored = store.get(id)!;
+    // Typing the caption was one act, so one Ctrl+Z has to undo all of it.
+    // Two entries left the mount a band taller than the photo it framed.
+    expect(restored.height).toBe(before.height);
+    expect((restored.payload as ImagePayload).caption).toBe('');
   });
 
   it('creates a checklist sticky with one unticked item', () => {
@@ -134,5 +162,65 @@ describe('DeskActions checklist editing', () => {
 
     history.undo();
     expect(items().map((i) => i.label)).toEqual(['one', 'two', 'three']);
+  });
+});
+
+describe('DeskActions inspector edits', () => {
+  let store: DeskStore;
+  let actions: DeskActions;
+  let history: HistoryStore;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: DESK_PERSISTENCE, useValue: new InMemoryDeskPersistence() }],
+    });
+    store = TestBed.inject(DeskStore);
+    actions = TestBed.inject(DeskActions);
+    history = TestBed.inject(HistoryStore);
+    store.insert(photo());
+  });
+
+  it('moves an object to typed coordinates as one undoable step', () => {
+    actions.setPosition('photo', 400, 900);
+    expect(store.get('photo')).toMatchObject({ x: 400, y: 900 });
+
+    history.undo();
+    expect(store.get('photo')).toMatchObject({ x: 40, y: 60 });
+    // One step, not two: the note was seeded rather than added, so anything
+    // else on the stack would be a second entry this gesture pushed.
+    expect(history.canUndo()).toBe(false);
+  });
+
+  it('records nothing when the typed coordinates are the ones it already has', () => {
+    actions.setPosition('photo', 40, 60);
+    expect(history.canUndo()).toBe(false);
+  });
+
+  it('turns an object to a typed angle and gives back the old tilt', () => {
+    actions.setRotation('photo', 12);
+    expect(store.get('photo')!.rotation).toBe(12);
+
+    history.undo();
+    expect(store.get('photo')!.rotation).toBe(-2.5);
+    expect(history.canUndo()).toBe(false);
+  });
+
+  it('records nothing when the typed angle is the one it already has', () => {
+    actions.setRotation('photo', -2.5);
+    expect(history.canUndo()).toBe(false);
+  });
+
+  it('reframes a picture and puts the tape back on one undo', () => {
+    actions.setImageFrame('photo', 'borderless');
+    expect((store.get('photo')!.payload as ImagePayload).frame).toBe('borderless');
+
+    history.undo();
+    expect((store.get('photo')!.payload as ImagePayload).frame).toBe('taped');
+  });
+
+  it('leaves objects that are not pictures alone', () => {
+    store.insert(checklistSticky());
+    actions.setImageFrame('list', 'framed');
+    expect(history.canUndo()).toBe(false);
   });
 });

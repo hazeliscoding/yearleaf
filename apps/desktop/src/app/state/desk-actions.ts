@@ -9,11 +9,14 @@ import { Injectable, inject } from '@angular/core';
 import { IMAGE_CAPTION_HEIGHT } from '@infinite-desk/canvas';
 import {
   AddObjectCommand,
+  CompositeCommand,
   DeleteObjectCommand,
   MoveObjectCommand,
   ResizeObjectCommand,
+  RotateObjectCommand,
   UpdatePayloadCommand,
   type DeskObject,
+  type ImagePayload,
   type StationeryColor,
 } from '@infinite-desk/domain';
 
@@ -216,6 +219,20 @@ export class DeskActions {
     this.commitMove(id, { x: object.x, y: object.y }, { x: object.x + dx, y: object.y + dy });
   }
 
+  /** Moves an object to an absolute position (inspector geometry fields). */
+  setPosition(id: string, x: number, y: number): void {
+    const object = this.desk.get(id);
+    if (!object) return;
+    this.commitMove(id, { x: object.x, y: object.y }, { x, y });
+  }
+
+  /** Turns an object to an absolute angle in degrees (inspector rotation). */
+  setRotation(id: string, degrees: number): void {
+    const object = this.desk.get(id);
+    if (!object || object.rotation === degrees) return;
+    this.history.execute(new RotateObjectCommand(this.desk, id, object.rotation, degrees));
+  }
+
   /** Toggles one checklist item's done state (undoable). */
   toggleChecklistItem(id: string, index: number): void {
     const object = this.desk.get(id);
@@ -251,6 +268,33 @@ export class DeskActions {
     );
   }
 
+  /** Shows or removes a sticky's push-pin (inspector toggle). */
+  setStickyPinned(id: string, pinned: boolean): void {
+    const object = this.desk.get(id);
+    if (!object || object.payload.kind !== 'sticky' || !!object.payload.pinned === pinned) return;
+    this.history.execute(
+      new UpdatePayloadCommand(this.desk, id, object.payload, { ...object.payload, pinned }),
+    );
+  }
+
+  /** Switches a sticky between the handwriting and the plain face. */
+  setStickyHand(id: string, hand: boolean): void {
+    const object = this.desk.get(id);
+    if (!object || object.payload.kind !== 'sticky' || !!object.payload.hand === hand) return;
+    this.history.execute(
+      new UpdatePayloadCommand(this.desk, id, object.payload, { ...object.payload, hand }),
+    );
+  }
+
+  /** Changes how an image is presented (inspector frame control). */
+  setImageFrame(id: string, frame: ImagePayload['frame']): void {
+    const object = this.desk.get(id);
+    if (!object || object.payload.kind !== 'image') return;
+    this.history.execute(
+      new UpdatePayloadCommand(this.desk, id, object.payload, { ...object.payload, frame }),
+    );
+  }
+
   /**
    * Recaptions an image (inspector caption field).
    *
@@ -262,16 +306,22 @@ export class DeskActions {
     if (!object || object.payload.kind !== 'image') return;
     const had = !!object.payload.caption;
     const has = !!caption;
-    if (had !== has) {
-      this.history.execute(
-        new ResizeObjectCommand(this.desk, id, object, {
-          width: object.width,
-          height: object.height + (has ? IMAGE_CAPTION_HEIGHT : -IMAGE_CAPTION_HEIGHT),
-        }),
-      );
-    }
+    const recaption = new UpdatePayloadCommand(this.desk, id, object.payload, {
+      ...object.payload,
+      caption,
+    });
+    const resize =
+      had === has
+        ? null
+        : new ResizeObjectCommand(this.desk, id, object, {
+            width: object.width,
+            height: object.height + (has ? IMAGE_CAPTION_HEIGHT : -IMAGE_CAPTION_HEIGHT),
+          });
+    // The band and the words appeared together, so one undo has to take both.
+    // Executing them separately left the mount a caption-height taller than the
+    // photo it framed until a second Ctrl+Z.
     this.history.execute(
-      new UpdatePayloadCommand(this.desk, id, object.payload, { ...object.payload, caption }),
+      resize ? new CompositeCommand([resize, recaption], 'Caption image') : recaption,
     );
   }
 }

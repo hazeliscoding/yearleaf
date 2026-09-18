@@ -76,6 +76,13 @@
 .db-igroup-body{padding:2px 12px 12px;display:flex;flex-direction:column;gap:8px}
 .db-irow{display:grid;grid-template-columns:88px minmax(0,1fr);align-items:center;gap:8px}
 .db-irow>label{font:var(--text-caption);color:var(--ink-secondary)}
+/* A fact the panel reports rather than a control. Truncates instead of
+   wrapping, because the row is a fixed two-column grid and a long filename
+   would otherwise push its own label out of line. */
+.db-ivalue{font:var(--text-body-small);color:var(--ink-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* For prose rather than an identifier: a truncated sentence reports almost
+   nothing, so it wraps to a few lines and clamps instead. */
+.db-ivalue--prose{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3}
 .db-input,.db-select select,.db-numfield input{height:var(--control-h-sm);font:var(--text-body-small);font-family:var(--font-ui);color:var(--ink-primary);background:var(--surface-raised);border:1px solid var(--border);border-radius:var(--radius-subtle);padding:0 8px;box-sizing:border-box;width:100%;transition:border-color var(--motion-fast) var(--ease-out)}
 .db-input:hover,.db-select select:hover{border-color:var(--border-strong)}
 /* Fields share the base and hover rules, so they share the focus ring too —
@@ -83,12 +90,20 @@
    the same panel wears. */
 .db-input:focus,.db-select select:focus{outline:none;border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
 .db-input::placeholder{color:var(--ink-muted)}
+/* For a field whose empty state means something — "no time set, so this event
+   is all-day" — rather than merely hinting at a format. The words are the only
+   report of that state, so they are content and have to meet contrast; muted
+   placeholder grey does not. */
+.db-input--stateful::placeholder{color:var(--ink-secondary)}
 .db-input[data-invalid="true"]{border-color:var(--danger)}
 .db-input:disabled{background:var(--surface-paper);color:var(--ink-disabled)}
 textarea.db-input{height:auto;min-height:56px;padding:6px 8px;resize:vertical}
 .db-field{display:flex;flex-direction:column;gap:4px}
 .db-field>label{font:var(--text-ui-label);color:var(--ink-secondary)}
-.db-help{font:var(--text-caption);color:var(--ink-muted)}
+/* Instructional text is content, not decoration, so it takes the readable ink
+   for the same reason `.db-input--stateful` does. At 11.5px the muted token
+   measures 3.6:1, which is below AA on every surface it lands on. */
+.db-help{font:var(--text-caption);color:var(--ink-secondary)}
 .db-field .db-help[data-invalid="true"]{color:var(--danger)}
 .db-search{position:relative;display:flex;align-items:center}
 /* The glyph overlays the input, so whichever element *wraps* it must leave the
@@ -127,6 +142,9 @@ textarea.db-input{height:auto;min-height:56px;padding:6px 8px;resize:vertical}
 .db-seg svg{width:12px;height:12px;stroke-width:1.5}
 .db-numfield{position:relative;display:inline-flex;align-items:center}
 .db-numfield input{padding-right:18px;font-feature-settings:var(--numeral-features)}
+/* With a unit marker the text has to clear the marker as well as the steppers,
+   or a long value draws straight through the glyph. */
+.db-numfield[data-unit] input{padding-right:32px}
 .db-numfield .db-num-unit{position:absolute;right:20px;font:var(--text-caption);color:var(--ink-muted);pointer-events:none}
 .db-numfield .db-num-steps{position:absolute;right:2px;display:flex;flex-direction:column}
 .db-numfield .db-num-steps button{width:14px;height:10px;border:none;background:none;color:var(--ink-muted);cursor:pointer;font-size:7px;line-height:1;padding:0}

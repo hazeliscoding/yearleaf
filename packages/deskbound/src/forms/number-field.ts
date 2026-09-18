@@ -2,14 +2,22 @@
  * `<db-number-field>` — numeric input with unit suffix and stepper buttons.
  */
 
-import { ChangeDetectionStrategy, Component, input, model } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  input,
+  model,
+  viewChild,
+} from '@angular/core';
 
 @Component({
   selector: 'db-number-field',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'db-numfield' },
+  host: { class: 'db-numfield', '[attr.data-unit]': 'unit() ? "" : null' },
   template: `
     <input
+      #field
       inputmode="numeric"
       [value]="value()"
       [attr.aria-label]="ariaLabel()"
@@ -19,8 +27,15 @@ import { ChangeDetectionStrategy, Component, input, model } from '@angular/core'
       <span class="db-num-unit">{{ suffix }}</span>
     }
     <span class="db-num-steps">
-      <button type="button" aria-label="Increase" (click)="stepBy(1)">▲</button>
-      <button type="button" aria-label="Decrease" (click)="stepBy(-1)">▼</button>
+      <!-- Named from the field, or a panel with three of these offers six
+           buttons called "Increase" and "Decrease" with nothing to tell a
+           screen reader which value each one moves. -->
+      <button type="button" [attr.aria-label]="'Increase ' + ariaLabel()" (click)="stepBy(1)">
+        ▲
+      </button>
+      <button type="button" [attr.aria-label]="'Decrease ' + ariaLabel()" (click)="stepBy(-1)">
+        ▼
+      </button>
     </span>
   `,
 })
@@ -34,10 +49,24 @@ export class DbNumberField {
   /** Accessible name for the input. */
   readonly ariaLabel = input('Number');
 
-  /** Parses typed input, ignoring values that are not numbers. */
+  private readonly field = viewChild.required<ElementRef<HTMLInputElement>>('field');
+
+  /**
+   * Commits typed input, and always redraws the box from the model afterwards.
+   *
+   * A blank field is a correction in progress, not a request for zero — and
+   * `Number('')` is `0`, so accepting anything finite would send an object to
+   * the origin the moment someone cleared the box to retype it. Rejecting alone
+   * is not enough either: the model would not change, so nothing would prompt
+   * Angular to rewrite the input, and the field would sit there showing a
+   * number the object does not have. Redrawing unconditionally also renders an
+   * accepted value canonically rather than exactly as typed.
+   */
   protected commit(raw: string): void {
-    const parsed = Number(raw);
-    if (Number.isFinite(parsed)) this.value.set(parsed);
+    const trimmed = raw.trim();
+    const parsed = Number(trimmed);
+    if (trimmed !== '' && Number.isFinite(parsed)) this.value.set(parsed);
+    this.field().nativeElement.value = String(this.value());
   }
 
   /** Applies one stepper increment in the given direction. */

@@ -17,7 +17,6 @@ import {
   computed,
   effect,
   inject,
-  input,
   signal,
   viewChild,
 } from '@angular/core';
@@ -33,7 +32,7 @@ import {
   type WorldRect,
 } from '@infinite-desk/canvas';
 import { dateKey, type Occurrence } from '@infinite-desk/domain';
-import { DbLayerPanel, DbZoomControl } from '@infinite-desk/deskbound';
+import { DbZoomControl } from '@infinite-desk/deskbound';
 
 import { sampleDayContent } from '../data/sample-desk';
 import { AttachmentStore, MAX_ATTACHMENT_BYTES } from '../persistence/attachments';
@@ -69,7 +68,7 @@ const HANDLE_RADIUS = 16;
 
 @Component({
   selector: 'app-workspace',
-  imports: [DbLayerPanel, DbZoomControl],
+  imports: [DbZoomControl],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     'data-screen-label': 'Canvas',
@@ -128,11 +127,6 @@ const HANDLE_RADIUS = 16;
         (fitYear)="viewport.fitTier('Year')"
       />
     </div>
-    @if (showLayers()) {
-      <div style="position:absolute;right:16px;bottom:16px">
-        <db-layer-panel [layers]="desk.layers()" (toggleLayer)="desk.toggleLayerVisibility($event)" />
-      </div>
-    }
   `,
 })
 export class Workspace {
@@ -149,9 +143,6 @@ export class Workspace {
 
   private readonly sceneCanvas = viewChild.required<ElementRef<HTMLCanvasElement>>('sceneCanvas');
   private readonly editArea = viewChild<ElementRef<HTMLTextAreaElement>>('editArea');
-
-  /** Whether the floating layer panel is visible (hidden under overlays). */
-  readonly showLayers = input(true);
 
   /** The scene controller; PixiJS never leaks past it. */
   private readonly scene = new CalendarSceneController();

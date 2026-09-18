@@ -1,6 +1,6 @@
 /**
- * The desk's object state: freely positioned objects, layers, and the
- * transient day-flash used by search/Today jumps.
+ * The desk's object state: freely positioned objects and the transient
+ * day-flash used by search/Today jumps.
  *
  * Implements the domain {@link DeskObjectStore} contract so commands from
  * `@infinite-desk/domain` mutate it — UI code routes every persistent
@@ -13,9 +13,8 @@
 import { Injectable, inject, signal } from '@angular/core';
 
 import type { DeskObject, DeskObjectStore } from '@infinite-desk/domain';
-import type { DbLayer } from '@infinite-desk/deskbound';
 
-import { INITIAL_FLOATS, INITIAL_LAYERS } from '../data/sample-desk';
+import { INITIAL_FLOATS } from '../data/sample-desk';
 import { DESK_PERSISTENCE } from '../persistence/desk-persistence.token';
 
 /** The single desk of version 1; desk management arrives with schema growth. */
@@ -27,8 +26,6 @@ export class DeskStore implements DeskObjectStore {
 
   /** Freely positioned desk objects, in z-order. */
   readonly floats = signal<readonly DeskObject[]>([...INITIAL_FLOATS]);
-  /** Layer panel rows. */
-  readonly layers = signal<readonly DbLayer[]>([...INITIAL_LAYERS]);
   /** Day currently flash-highlighted after a jump, if any. */
   readonly flashDate = signal<Date | null>(null);
 
@@ -86,15 +83,6 @@ export class DeskStore implements DeskObjectStore {
     );
     const updated = this.get(id);
     if (updated) this.persist(this.persistence.saveObject(DESK_ID, updated));
-  }
-
-  /** Toggles a layer's visibility by row index. */
-  toggleLayerVisibility(index: number): void {
-    this.layers.update((layers) =>
-      layers.map((layer, i) =>
-        i === index ? { ...layer, visible: layer.visible === false } : layer,
-      ),
-    );
   }
 
   /** Flash-highlights a day cell for ~1.8s after a search or Today jump. */

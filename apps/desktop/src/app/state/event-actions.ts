@@ -21,6 +21,29 @@ import { EventStore } from './event-store';
 import { HistoryStore } from './history-store';
 import { SelectionStore } from './selection-store';
 
+/**
+ * Reads a typed start time as a clock value, or refuses it.
+ *
+ * The domain documents `timeLabel` as a start time shown as written, e.g.
+ * `"14:00"`, and the chip reserves room for it before the title. Storing
+ * whatever was typed would let a sentence take the whole chip and push the
+ * event's own name off the calendar — so an entry that is not a time is
+ * refused rather than displayed. Accepts `9:30`, `09.30` and `9 30`, and pads
+ * to two digits so the day cell reads in a single column.
+ *
+ * @returns The normalised label, `''` to mean all-day, or `null` to refuse.
+ */
+export function normaliseTimeLabel(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  const match = /^(\d{1,2})[:. ]?(\d{2})$/.exec(trimmed);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
 @Injectable({ providedIn: 'root' })
 export class EventActions {
   private readonly events = inject(EventStore);
@@ -60,6 +83,47 @@ export class EventActions {
     if (!trimmed) return;
     this.history.execute(
       new UpdateEventCommand(this.events, id, { title: trimmed }, 'Rename event'),
+    );
+  }
+
+  /**
+   * Sets or clears an event's start time.
+   *
+   * Emptying the field is a real edit here, unlike {@link setTitle}: having no
+   * time is precisely what makes an event all-day, so a cleared field has to
+   * null the stored label rather than be refused.
+   *
+   * The variant has to travel with the time, because the chip's treatment is
+   * chosen from the variant alone — set one without the other and a newly timed
+   * event keeps the solid all-day fill it no longer deserves. But `EventVariant`
+   * carries two unrelated things under one name: whether a chip draws as timed
+   * or all-day, and whether it is tentative or completed. Only the first
+   * follows the clock, so a tentative or completed event keeps its status and
+   * just gains a time. Rewriting it to `'timed'` would quietly discard
+   * something the user set on purpose.
+   *
+   * An entry that is not a clock value is refused outright — see
+   * {@link normaliseTimeLabel} for why displaying it would cost the event its
+   * name on the calendar.
+   */
+  setTime(id: string, timeLabel: string): void {
+    const event = this.events.get(id);
+    if (!event) return;
+    const trimmed = normaliseTimeLabel(timeLabel);
+    if (trimmed === null) return;
+    if ((event.timeLabel ?? '') === trimmed) return;
+
+    const status = event.variant === 'tentative' || event.variant === 'completed';
+    this.history.execute(
+      new UpdateEventCommand(
+        this.events,
+        id,
+        {
+          timeLabel: trimmed || undefined,
+          variant: status ? event.variant : trimmed ? 'timed' : 'allday',
+        },
+        'Set event time',
+      ),
     );
   }
 

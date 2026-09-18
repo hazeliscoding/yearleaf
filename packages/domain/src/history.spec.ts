@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   AddObjectCommand,
+  CompositeCommand,
   DeleteObjectCommand,
   MoveObjectCommand,
   ResizeObjectCommand,
+  RotateObjectCommand,
   UpdatePayloadCommand,
+  type Command,
   type DeskObjectStore,
 } from './commands';
 import { CommandHistory } from './history';
@@ -93,6 +96,19 @@ describe('CommandHistory', () => {
     expect(store.get('a')).toMatchObject({ x: 5, y: 6 });
   });
 
+  it('turns an object and restores the exact angle on undo', () => {
+    const store = makeStore();
+    const history = new CommandHistory();
+    store.insert({ ...sticky('a'), rotation: -1.75 });
+
+    history.execute(new RotateObjectCommand(store, 'a', -1.75, 45));
+    expect(store.get('a')?.rotation).toBe(45);
+
+    history.undo();
+    // The tilt it was set down with, not a tidied-up zero.
+    expect(store.get('a')?.rotation).toBe(-1.75);
+  });
+
   it('swaps payloads on payload update and undo', () => {
     const store = makeStore();
     const history = new CommandHistory();
@@ -131,5 +147,59 @@ describe('CommandHistory', () => {
     expect(history.canUndo).toBe(false);
     // 'a' remains because its command fell off the bounded stack.
     expect(store.objects.has('a')).toBe(true);
+  });
+});
+
+describe('CompositeCommand', () => {
+  /** A command that only records the order it was driven in. */
+  function step(name: string, log: string[]): Command {
+    return {
+      label: name,
+      execute: () => void log.push(`do ${name}`),
+      undo: () => void log.push(`undo ${name}`),
+    };
+  }
+
+  it('undoes its steps in reverse, so each unwinds what the next left', () => {
+    const log: string[] = [];
+    const history = new CommandHistory();
+
+    history.execute(
+      new CompositeCommand([step('resize', log), step('caption', log)], 'Caption image'),
+    );
+    expect(log).toEqual(['do resize', 'do caption']);
+
+    history.undo();
+    // Forward order here would make each step undo against state its sibling
+    // has not yet given back — the reason the reversal is the contract.
+    expect(log).toEqual(['do resize', 'do caption', 'undo caption', 'undo resize']);
+  });
+
+  it('is one history entry however many steps it carries', () => {
+    const store = makeStore();
+    const history = new CommandHistory();
+    store.insert(sticky('a', 10, 20));
+
+    history.execute(
+      new CompositeCommand([
+        new MoveObjectCommand(store, 'a', { x: 10, y: 20 }, { x: 300, y: 400 }),
+        new ResizeObjectCommand(
+          store,
+          'a',
+          { width: 240, height: 170 },
+          { width: 240, height: 198 },
+        ),
+      ]),
+    );
+    expect(history.undoDepth).toBe(1);
+
+    history.undo();
+    expect(store.get('a')).toMatchObject({ x: 10, y: 20, width: 240, height: 170 });
+    expect(history.canUndo).toBe(false);
+  });
+
+  it('takes its label from the first step when none is given', () => {
+    const log: string[] = [];
+    expect(new CompositeCommand([step('resize', log)]).label).toBe('resize');
   });
 });

@@ -102,9 +102,9 @@ test('the composition overlay floats above the canvas panels', async ({ page }) 
   await openWorkspace(page);
   const host = (await page.locator('[data-screen-label="Canvas"]').boundingBox())!;
 
-  // The layer panel sits in the bottom-right corner; typing must not go into a
+  // The zoom control sits in the bottom-left corner; typing must not go into a
   // field hidden behind it.
-  const target = { x: host.x + host.width - 120, y: host.y + host.height - 120 };
+  const target = { x: host.x + 90, y: host.y + host.height - 40 };
   await page.mouse.dblclick(target.x, target.y);
   const editor = page.getByLabel('Edit text');
   await expect(editor).toBeFocused();

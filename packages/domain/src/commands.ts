@@ -151,6 +151,38 @@ export class ResizeObjectCommand implements Command {
   }
 }
 
+/**
+ * Commits an object's angle.
+ *
+ * Like {@link MoveObjectCommand}, both the old and the new angle are known
+ * when the command is built, so turning an object is one history entry rather
+ * than one per degree.
+ */
+export class RotateObjectCommand implements Command {
+  readonly label = 'Rotate object';
+
+  /**
+   * @param store - Store holding the object.
+   * @param id - Identifier of the turned object.
+   * @param from - Angle in degrees before the change.
+   * @param to - Angle in degrees after it.
+   */
+  constructor(
+    private readonly store: DeskObjectStore,
+    private readonly id: string,
+    private readonly from: number,
+    private readonly to: number,
+  ) {}
+
+  execute(): void {
+    this.store.update(this.id, { rotation: this.to });
+  }
+
+  undo(): void {
+    this.store.update(this.id, { rotation: this.from });
+  }
+}
+
 /** Replaces an object's payload, e.g. after editing text or restyling. */
 export class UpdatePayloadCommand implements Command {
   readonly label: string;
@@ -176,5 +208,39 @@ export class UpdatePayloadCommand implements Command {
 
   undo(): void {
     this.store.update(this.id, { payload: this.from });
+  }
+}
+
+/**
+ * Several commands the user performed as one act, kept as one history entry.
+ *
+ * Some edits necessarily touch more than one thing — captioning a print also
+ * grows its mount to make room for the band — and a person who typed once
+ * expects one Ctrl+Z to take it all back, not to leave the frame stretched
+ * around a caption that is no longer there.
+ *
+ * Undo runs the children in reverse order, so each one unwinds against the
+ * state its successor left rather than the state it originally saw.
+ */
+export class CompositeCommand implements Command {
+  readonly label: string;
+  private readonly steps: readonly Command[];
+
+  /**
+   * @param steps - Child commands, in the order they are applied.
+   * @param label - Human-readable description of the whole act; defaults to
+   *   the first child's label.
+   */
+  constructor(steps: readonly Command[], label?: string) {
+    this.steps = [...steps];
+    this.label = label ?? this.steps[0]?.label ?? 'Edit';
+  }
+
+  execute(): void {
+    for (const step of this.steps) step.execute();
+  }
+
+  undo(): void {
+    for (let i = this.steps.length - 1; i >= 0; i--) this.steps[i].undo();
   }
 }

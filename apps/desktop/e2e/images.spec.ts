@@ -116,8 +116,12 @@ test('dropping a picture places it on the desk and draws it', async ({ page }) =
 
 test('a dropped picture keeps its shape', async ({ page }) => {
   await openWorkspace(page);
+  // Counted from what the desk already holds: the sample objects satisfy a
+  // bare "more than none" immediately, so the assertion below could read a
+  // seeded text block before the picture had landed.
+  const before = (await floats(page)).length;
   await dropImage(page, 'wide.png');
-  await expect.poll(() => page.evaluate(() => window.__e2e.floats().length)).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => window.__e2e.floats().length)).toBe(before + 1);
 
   const created = (await floats(page)).at(-1)!;
   // The source is 4x2, so the frame must be twice as wide as it is tall

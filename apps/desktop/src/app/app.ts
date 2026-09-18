@@ -59,7 +59,7 @@ const NUDGE_LARGE = 64;
     />
     <app-tool-rail />
     <div style="position:relative;overflow:hidden">
-      <app-workspace style="position:absolute;inset:0" [showLayers]="!paletteOpen() && !searchOpen()" />
+      <app-workspace style="position:absolute;inset:0" />
       @if (searchOpen()) {
         <app-search-overlay (closed)="searchOpen.set(false)" (jumped)="jumpToSeptemberDay($event)" />
       }
@@ -172,6 +172,14 @@ export class App {
           this.selection.occurrence.set(found);
           return true;
         },
+        // Selecting a desk object by id rather than by pixel: a file chip or a
+        // text block sits wherever the desk was last panned to.
+        select: (id: string) => {
+          const object = this.desk.floats().find((f) => f.id === id);
+          if (!object) return false;
+          this.selection.select(object.payload.kind, id);
+          return true;
+        },
         toScreen: (x: number, y: number) => {
           const v = this.viewport.viewport();
           return { x: v.panX + x * v.zoom, y: v.panY + y * v.zoom };
@@ -229,9 +237,6 @@ export class App {
         break;
       case 'Fit month':
         this.viewport.fitTier('Month');
-        break;
-      case 'Toggle layer: Photos':
-        this.desk.toggleLayerVisibility(4);
         break;
     }
   }

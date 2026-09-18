@@ -15,7 +15,9 @@ declare global {
     __e2e: {
       viewport(): { panX: number; panY: number; zoom: number };
       panTo(x: number, y: number): void;
+      toScreen(x: number, y: number): { x: number; y: number };
       dateAtCenter(): { day: number; month: number; year: number } | null;
+      flying(): boolean;
     };
   }
 }
@@ -28,6 +30,11 @@ async function openWorkspace(page: Page): Promise<void> {
 const navLabel = (page: Page) =>
   page.locator('db-date-navigator span').first().textContent();
 const zoom = (page: Page) => page.evaluate(() => window.__e2e.viewport().zoom);
+
+/** Waits for a glide to land, so assertions read the destination. */
+const landed = async (page: Page) => {
+  await expect.poll(() => page.evaluate(() => window.__e2e.flying())).toBe(false);
+};
 
 test('the forward arrow reaches next month', async ({ page }) => {
   await openWorkspace(page);
@@ -69,6 +76,7 @@ test('stepping keeps the zoom it found', async ({ page }) => {
   const before = await zoom(page);
 
   await page.getByLabel('Next month').click();
+  await landed(page);
 
   // Re-framing on every step would fight a reader who had zoomed in to work.
   expect(await zoom(page)).toBeCloseTo(before, 5);
@@ -92,9 +100,11 @@ test('a look at the whole year does not lose the month you were reading', async 
   await expect.poll(() => navLabel(page)).toContain('November 2026');
 
   await page.getByRole('radio', { name: 'Year' }).click();
+  await landed(page);
   await expect.poll(() => zoom(page)).toBeLessThan(0.2);
 
   await page.getByRole('radio', { name: 'Month' }).click();
+  await landed(page);
 
   // This used to land on May every time, whatever had been on screen, because
   // the centre of a year block always falls on the same boundary.
@@ -164,11 +174,13 @@ test('Space presses the arrows, the way a button is meant to work', async ({ pag
 test('stepping while zoomed in keeps the date rather than the position', async ({ page }) => {
   await openWorkspace(page);
   await page.getByRole('radio', { name: 'Day' }).click();
+  await landed(page);
   await expect.poll(() => zoom(page)).toBeGreaterThan(1);
 
   const dayUnder = () => page.evaluate(() => window.__e2e.dateAtCenter());
   const before = await dayUnder();
   await page.getByLabel('Next month').click();
+  await landed(page);
   const after = await dayUnder();
 
   // At this zoom no month name is on screen, so the date is the only sign
@@ -217,3 +229,70 @@ test('a zoom press moves by the same proportion wherever it starts', async ({ pa
   // every scale.
   expect(afterHigh / high).toBeCloseTo(afterLow / low, 4);
 });
+
+test('a month parks where a fit would park it, not half a margin over', async ({ page }) => {
+  await openWorkspace(page);
+  // September 2026 is the third column of its block; October is the first of
+  // the next row, so each sheet's own origin is the like-for-like comparison.
+  const SEPTEMBER_X = 4680;
+  const sepLeft = await page.evaluate(() => window.__e2e.toScreen(4680, 0).x);
+
+  await page.getByLabel('Next month').click();
+  await landed(page);
+  const octLeft = await page.evaluate(() => window.__e2e.toScreen(0, 0).x);
+
+  // A step used to centre the bare month while the fit centred it with its
+  // desk margin, parking the sheet about 128px further right. The same screen
+  // position was then Friday in one month and Thursday in the next, and a note
+  // dropped by eye landed a day early.
+  expect(Math.abs(octLeft - sepLeft)).toBeLessThan(4);
+  expect(SEPTEMBER_X).toBe(4680);
+});
+
+test('stepping off the bare desk brings you back to a month', async ({ page }) => {
+  await openWorkspace(page);
+  const box = (await page.locator('[data-screen-label="Canvas"]').boundingBox())!;
+
+  // Drag east past the last column, onto desk with no calendar on it at all.
+  for (let i = 0; i < 2; i++) {
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2);
+    await page.keyboard.down('Space');
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.1, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await page.keyboard.up('Space');
+  }
+
+  // An empty view is not a year view. It used to read as one, so the arrows
+  // became year arrows and a single click left for a month nobody had seen.
+  await expect(page.getByLabel('Next month')).toBeVisible();
+  await expect.poll(() => navLabel(page)).toContain('September 2026');
+
+  await page.getByLabel('Next month').click();
+  await landed(page);
+  await expect.poll(() => navLabel(page)).toContain('October 2026');
+  expect(await page.evaluate(() => window.__e2e.dateAtCenter())).not.toBeNull();
+});
+
+test('a step glides rather than cutting', async ({ page }) => {
+  await openWorkspace(page);
+  const at = () => page.evaluate(() => window.__e2e.viewport().panX);
+  const before = await at();
+
+  await page.getByLabel('Next month').click();
+  expect(await page.evaluate(() => window.__e2e.flying())).toBe(true);
+
+  // Sampled a third of the way through, where the view has left and not
+  // arrived. One forward step in three wraps a row and shares no pixels with
+  // the frame before it, so a cut taught the reader nothing about where the
+  // months actually are.
+  await page.waitForTimeout(140);
+  const during = await at();
+  await landed(page);
+  const after = await at();
+
+  expect(during).not.toBe(before);
+  expect(during).not.toBe(after);
+  expect(Math.abs(during - before)).toBeLessThan(Math.abs(after - before));
+});
+

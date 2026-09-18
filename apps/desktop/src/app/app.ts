@@ -181,6 +181,9 @@ export class App {
           this.selection.select(object.payload.kind, id);
           return true;
         },
+        // True while the view is gliding between framings; assertions about
+        // where it ended up have to wait for it to land.
+        flying: () => this.viewport.flying(),
         // The date under the middle of the screen, for asserting what a step
         // did at a zoom where no month name is drawn.
         dateAtCenter: () => {

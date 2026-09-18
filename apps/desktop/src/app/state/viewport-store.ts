@@ -57,16 +57,31 @@ const ZOOM_STEP = 1.25;
 const MONTH_NAMED_COVERAGE = 0.2;
 /** Coverage at which the view sits wholly inside one month — no header in sight. */
 const MONTH_FILLS_VIEW = 0.99;
+/** Length of a glide between two framings. */
+const GLIDE_MS = 420;
+/** Screen distance below which a glide is not worth the frames. */
+const SHORT_HOP = 24;
+
+/** Whether the reader has asked the system for less motion. */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
 
 @Injectable({ providedIn: 'root' })
 export class ViewportStore {
   private readonly state = signal<ViewportState>({ panX: 0, panY: 0, zoom: 0.5 });
   private sized = false;
+  /** Handle of the glide in flight, so a new one replaces it rather than fighting it. */
+  private flight: number | null = null;
+  /** Suppresses the glide for a framing the reader did not ask to travel to. */
+  private instant = false;
+  /** True while a glide is in the air; readers wait for it to land. */
+  readonly flying = signal(false);
 
   /** Viewport pixel size, kept current by the workspace's resize observer. */
   readonly viewSize = signal({ width: 1440, height: 900 });
-  /** Whether the next transform change animates (fits/jumps do, gestures don't). */
-  readonly animate = signal(true);
   /** Tier preset applied on first layout (settable via `?tier=` for e2e). */
   initialTier: Tier = 'Month';
 
@@ -110,7 +125,15 @@ export class ViewportStore {
     monthIndex: new Date().getMonth(),
   });
   private readonly followFocus = effect(() => {
+    // A glide passes through framings nobody asked to be at. Reading position
+    // from those overwrote the destination a step had just set, with whatever
+    // the view happened to be crossing.
+    if (this.flying()) return;
     const live = this.focusedMonth();
+    // Dragged off the calendar onto bare desk: there is nothing to read a
+    // position from, so hold the last one rather than taking a guess from a
+    // view with no calendar in it.
+    if (live.coverage === 0) return;
     if (live.coverage < MONTH_NAMED_COVERAGE) {
       this.detailMonth.update((held) => ({ ...held, year: live.year }));
       return;
@@ -127,9 +150,14 @@ export class ViewportStore {
    * month plainly being read and the same arrow would silently start moving
    * twelve of them. A year view gives every month about a twelfth.
    */
-  readonly navUnit = computed<'month' | 'year'>(() =>
-    this.focusedMonth().coverage < MONTH_NAMED_COVERAGE ? 'year' : 'month',
-  );
+  readonly navUnit = computed<'month' | 'year'>(() => {
+    const { coverage } = this.focusedMonth();
+    // No calendar on screen at all is not a year view: an arrow here should
+    // carry you back to a month you can read, not a year past the one you
+    // last saw.
+    if (coverage === 0) return 'month';
+    return coverage < MONTH_NAMED_COVERAGE ? 'year' : 'month';
+  });
 
   /**
    * Date-navigator label.
@@ -158,26 +186,37 @@ export class ViewportStore {
     this.viewSize.set({ width, height });
     if (!this.sized && width > 0) {
       this.sized = true;
-      // First layout opens on today's month, not the world origin.
+      // First layout opens on today's month, not the world origin — and opens
+      // there, rather than flying in from a framing nobody chose.
+      this.instant = true;
       this.fitTier(this.initialTier, new Date());
+      this.instant = false;
     }
   }
 
   /** Translates the viewport by a screen-space delta (gesture; no animation). */
   panByScreen(dx: number, dy: number): void {
-    this.animate.set(false);
+    this.stopFlight();
     this.state.update((s) => panBy(s, dx, dy));
   }
 
   /** Sets the pan to an absolute screen offset (used while drag-panning). */
   panTo(x: number, y: number): void {
-    this.animate.set(false);
+    this.stopFlight();
     this.state.update((s) => ({ ...s, panX: x, panY: y }));
+  }
+
+  /** Abandons a glide in flight; a hand on the desk outranks one. */
+  private stopFlight(): void {
+    if (this.flight === null) return;
+    cancelAnimationFrame(this.flight);
+    this.flight = null;
+    this.flying.set(false);
   }
 
   /** Zooms by a factor around a screen-space focal point. */
   zoomAt(focus: Point, factor: number): void {
-    this.animate.set(false);
+    this.stopFlight();
     this.state.update((s) => zoomAroundPoint(s, focus, factor, MIN_ZOOM, MAX_ZOOM));
   }
 
@@ -190,7 +229,6 @@ export class ViewportStore {
    * in covered the range that three presses out then undid twice over.
    */
   zoomStep(direction: 1 | -1): void {
-    this.animate.set(true);
     const { width, height } = this.viewSize();
     const factor = direction > 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
     this.state.update((s) =>
@@ -279,14 +317,24 @@ export class ViewportStore {
       return;
     }
 
-    const rect = monthRect(to.year, to.monthIndex);
+    // Framed exactly as a Month fit frames it, margin included. Centring the
+    // bare month instead parked the sheet half a margin further right than the
+    // view it was stepped from — about 128px — so the same screen position was
+    // Friday in one month and Thursday in the next, and a note dropped by eye
+    // landed a day early.
+    const rect = this.monthFitRect(to.year, to.monthIndex);
     this.centerOn({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, zoom);
+  }
+
+  /** The rectangle a Month fit frames: the month plus its desk margin. */
+  private monthFitRect(year: number, monthIndex: number): WorldRect {
+    const rect = monthRect(year, monthIndex);
+    return { ...rect, width: rect.width + MONTH_FIT_MARGIN };
   }
 
   /** Fits a specific month (plus its desk margin) into the viewport. */
   fitMonthOf(year: number, monthIndex: number): void {
-    const rect = monthRect(year, monthIndex);
-    this.fitRect({ ...rect, width: rect.width + MONTH_FIT_MARGIN });
+    this.fitRect(this.monthFitRect(year, monthIndex));
   }
 
   /** Centers a date's cell on screen, zooming in to at least week level. */
@@ -308,14 +356,60 @@ export class ViewportStore {
     this.centerOn({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, zoom);
   }
 
-  /** Centers a world point at an explicit zoom (animated). */
+  /** Centers a world point at an explicit zoom, gliding there. */
   private centerOn(point: Point, zoom: number): void {
-    this.animate.set(true);
     const { width, height } = this.viewSize();
-    this.state.set({
+    this.glideTo({
       zoom,
       panX: width / 2 - point.x * zoom,
       panY: height / 2 - point.y * zoom,
     });
+  }
+
+  /**
+   * Eases the viewport to a target instead of cutting to it.
+   *
+   * Months run three across, so one forward step in three wraps to the next
+   * row and shares no pixels at all with the frame before it. Cutting made the
+   * arrows work and the layout stay invisible — you could reach October
+   * without ever learning it sits below July and two columns left. The flight
+   * is the only thing in the product that shows the shape of the plane.
+   *
+   * Zoom eases geometrically: interpolating it linearly reads as a lurch,
+   * because equal steps of zoom are not equal steps of apparent motion.
+   */
+  private glideTo(target: ViewportState): void {
+    this.stopFlight();
+    const from = this.state();
+    const far =
+      Math.abs(target.panX - from.panX) + Math.abs(target.panY - from.panY) > SHORT_HOP ||
+      Math.abs(Math.log(target.zoom / from.zoom)) > 0.05;
+    if (this.instant || !far || prefersReducedMotion()) {
+      this.state.set(target);
+      return;
+    }
+
+    const started = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - started) / GLIDE_MS);
+      // Ease out cubic: leaves quickly, settles gently.
+      const k = 1 - Math.pow(1 - t, 3);
+      this.state.set({
+        zoom: from.zoom * Math.pow(target.zoom / from.zoom, k),
+        panX: from.panX + (target.panX - from.panX) * k,
+        panY: from.panY + (target.panY - from.panY) * k,
+      });
+      if (t < 1) {
+        this.flight = requestAnimationFrame(tick);
+        return;
+      }
+      // Landed: clear the flag first, so the position the view settles at is
+      // the one that gets read.
+      this.flight = null;
+      this.flying.set(false);
+      this.state.set(target);
+    };
+    this.flying.set(true);
+    this.flight = requestAnimationFrame(tick);
   }
 }

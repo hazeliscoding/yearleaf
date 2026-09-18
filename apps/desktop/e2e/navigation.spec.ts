@@ -15,6 +15,7 @@ declare global {
     __e2e: {
       viewport(): { panX: number; panY: number; zoom: number };
       panTo(x: number, y: number): void;
+      dateAtCenter(): { day: number; month: number; year: number } | null;
     };
   }
 }
@@ -109,6 +110,72 @@ test('at the year tier the arrows move what the label names', async ({ page }) =
   // month would move the view and change nothing the user can read.
   await page.getByLabel('Next year').click();
   await expect.poll(() => navLabel(page)).toBe('2027');
+});
+
+// Every month of the year, because the first version of this only worked from
+// September. Holding a month in the first row put the stepped view across the
+// seam between two year blocks, the focus rule read the earlier year back, and
+// the arrow went dead — for a quarter of all starting positions.
+for (const [monthIndex, name] of [
+  [0, 'January'],
+  [2, 'March'],
+  [6, 'July'],
+  [11, 'December'],
+] as const) {
+  test(`stepping a year works from ${name}`, async ({ page }) => {
+    await openWorkspace(page);
+    const next = page.getByLabel('Next month');
+    // Walk to the month under test, then zoom out to the year.
+    const steps = monthIndex - 8;
+    for (let i = 0; i < Math.abs(steps); i++) {
+      await (steps > 0 ? next : page.getByLabel('Previous month')).click();
+    }
+    await expect.poll(() => navLabel(page)).toContain(name);
+
+    await page.getByRole('radio', { name: 'Year' }).click();
+    await expect.poll(() => navLabel(page)).toBe('2026');
+
+    await page.getByLabel('Next year').click();
+    await expect.poll(() => navLabel(page)).toBe('2027');
+
+    // And again, because the failure showed as a fixed point: the first click
+    // appeared to work and every one after it did nothing.
+    await page.getByLabel('Next year').click();
+    await expect.poll(() => navLabel(page)).toBe('2028');
+
+    // Back the other way one year at a time, not two.
+    await page.getByLabel('Previous year').click();
+    await expect.poll(() => navLabel(page)).toBe('2027');
+  });
+}
+
+test('Space presses the arrows, the way a button is meant to work', async ({ page }) => {
+  await openWorkspace(page);
+  await expect.poll(() => navLabel(page)).toContain('September 2026');
+
+  await page.getByLabel('Next month').focus();
+  await page.keyboard.press('Space');
+
+  // The canvas pan gesture used to swallow Space before the focused button
+  // could act on it, which left the toolbar unusable from the keyboard.
+  await expect.poll(() => navLabel(page)).toContain('October 2026');
+});
+
+test('stepping while zoomed in keeps the date rather than the position', async ({ page }) => {
+  await openWorkspace(page);
+  await page.getByRole('radio', { name: 'Day' }).click();
+  await expect.poll(() => zoom(page)).toBeGreaterThan(1);
+
+  const dayUnder = () => page.evaluate(() => window.__e2e.dateAtCenter());
+  const before = await dayUnder();
+  await page.getByLabel('Next month').click();
+  const after = await dayUnder();
+
+  // At this zoom no month name is on screen, so the date is the only sign
+  // anything happened. Carrying a geometric offset instead moved it backwards
+  // — September the 17th became October the 15th under a control called Next.
+  expect(after?.day).toBe(before?.day);
+  expect(after?.month).toBe((before!.month + 1) % 12);
 });
 
 test('a wheel notch out undoes a wheel notch in', async ({ page }) => {

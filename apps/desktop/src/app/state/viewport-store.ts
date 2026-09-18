@@ -16,6 +16,7 @@ import {
   MONTH_H,
   MONTH_W,
   cellRectForDate,
+  dateForWorldPoint,
   fitZoom,
   monthForVisibleRect,
   monthFromOrdinal,
@@ -31,6 +32,7 @@ import {
   type ViewportState,
   type WorldRect,
 } from '@infinite-desk/canvas';
+import { daysInMonth } from '@infinite-desk/domain';
 
 /** User-facing zoom tiers, closest first. */
 export type Tier = 'Day' | 'Week' | 'Month' | 'Year';
@@ -45,6 +47,16 @@ const MONTH_NAMES = [
 const MONTH_FIT_MARGIN = 560;
 /** Ratio one press of the zoom widget applies; about six presses per tier. */
 const ZOOM_STEP = 1.25;
+/**
+ * Share of the view one month must cover for the navigator to name it.
+ *
+ * Below this the screen is holding a spread of months rather than one, so the
+ * navigator reports the year instead. A year block gives each month about a
+ * twelfth; a month that dominates the view is far above a fifth.
+ */
+const MONTH_NAMED_COVERAGE = 0.2;
+/** Coverage at which the view sits wholly inside one month — no header in sight. */
+const MONTH_FILLS_VIEW = 0.99;
 
 @Injectable({ providedIn: 'root' })
 export class ViewportStore {
@@ -85,12 +97,13 @@ export class ViewportStore {
   /**
    * The month the user was last reading, which is where a Month fit returns.
    *
-   * Zooming out to look around must not lose your place. At the year tier
-   * every month is on screen at once, so asking which one is focused has no
-   * honest answer — the old centre-point rule always said May, whatever you
-   * had been reading before you zoomed out. So the month is held and only the
-   * year follows, which means panning across years up there and coming back
-   * lands on the same month of the year you moved to.
+   * Zooming out to look around must not lose your place. Once no single month
+   * covers much of the screen there is no honest answer to which one is
+   * focused — the old centre-point rule always said May, whatever had been on
+   * screen before, because the centre of a year block falls on the same
+   * boundary every time. So the month is held up there and only the year
+   * follows, which means panning across years and coming back lands on the
+   * same month of the year you moved to.
    */
   private readonly detailMonth = signal({
     year: new Date().getFullYear(),
@@ -98,23 +111,35 @@ export class ViewportStore {
   });
   private readonly followFocus = effect(() => {
     const live = this.focusedMonth();
-    if (this.tier() === 'Year') this.detailMonth.update((held) => ({ ...held, year: live.year }));
-    else this.detailMonth.set(live);
+    if (live.coverage < MONTH_NAMED_COVERAGE) {
+      this.detailMonth.update((held) => ({ ...held, year: live.year }));
+      return;
+    }
+    this.detailMonth.set({ year: live.year, monthIndex: live.monthIndex });
   });
 
   /**
    * What the navigator's arrows move, and what its label names.
    *
-   * They are the same thing on purpose: at the year tier the label reads
-   * "2026" and the arrows step a year, everywhere else it names a month and
-   * they step a month.
+   * Decided by how much of the screen one month covers rather than by the
+   * zoom tier. The tier turns over to Year while a single month still fills
+   * two thirds of the view, and at that point the label would stop naming the
+   * month plainly being read and the same arrow would silently start moving
+   * twelve of them. A year view gives every month about a twelfth.
    */
-  readonly navUnit = computed<'month' | 'year'>(() => (this.tier() === 'Year' ? 'year' : 'month'));
+  readonly navUnit = computed<'month' | 'year'>(() =>
+    this.focusedMonth().coverage < MONTH_NAMED_COVERAGE ? 'year' : 'month',
+  );
 
-  /** Date-navigator label for the current tier and focus. */
+  /**
+   * Date-navigator label.
+   *
+   * Reads the same value the arrows move, so "the arrows move what the label
+   * names" holds by construction rather than by the two happening to agree.
+   */
   readonly navLabel = computed(() => {
-    const focus = this.focusedMonth();
-    return this.tier() === 'Year'
+    const focus = this.detailMonth();
+    return this.navUnit() === 'year'
       ? String(focus.year)
       : `${MONTH_NAMES[focus.monthIndex]} ${focus.year}`;
   });
@@ -225,18 +250,37 @@ export class ViewportStore {
    */
   step(delta: number): void {
     const from = this.detailMonth();
-    const months = this.navUnit() === 'year' ? delta * 12 : delta;
-    const to = monthFromOrdinal(monthOrdinal(from.year, from.monthIndex) + months);
+    const zoom = this.state().zoom;
 
-    const origin = monthOrigin(from.year, from.monthIndex);
-    const center = this.centerWorld();
-    const clamp = (v: number, hi: number) => Math.min(hi, Math.max(0, v));
-    const withinX = clamp(center.x - origin.x, MONTH_W);
-    const withinY = clamp(center.y - origin.y, MONTH_H);
+    // A year step has to land on the year block, not on a month inside it.
+    // Centring a month put the view across the seam between two blocks, where
+    // the focus rule then read the wrong year back and undid the step — which
+    // left the arrows inert for any month in the first row of a block.
+    if (this.navUnit() === 'year') {
+      const to = { year: from.year + delta, monthIndex: from.monthIndex };
+      this.detailMonth.set(to);
+      const block = yearRect(to.year);
+      this.centerOn({ x: block.x + block.width / 2, y: block.y + block.height / 2 }, zoom);
+      return;
+    }
 
-    const target = monthOrigin(to.year, to.monthIndex);
+    const to = monthFromOrdinal(monthOrdinal(from.year, from.monthIndex) + delta);
     this.detailMonth.set(to);
-    this.centerOn({ x: target.x + withinX, y: target.y + withinY }, this.state().zoom);
+
+    // Zoomed in past a whole month there is no month name on screen, so the
+    // only sign that anything happened is the date under the cursor. Carrying
+    // the date over makes "next" advance it; carrying a geometric offset
+    // instead moved it backwards, because months start on different weekdays.
+    if (this.focusedMonth().coverage >= MONTH_FILLS_VIEW) {
+      const centred = dateForWorldPoint(this.centerWorld());
+      const day = Math.min(centred?.date.getDate() ?? 15, daysInMonth(to.year, to.monthIndex));
+      const cell = cellRectForDate(new Date(to.year, to.monthIndex, day));
+      this.centerOn({ x: cell.x + cell.width / 2, y: cell.y + cell.height / 2 }, zoom);
+      return;
+    }
+
+    const rect = monthRect(to.year, to.monthIndex);
+    this.centerOn({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }, zoom);
   }
 
   /** Fits a specific month (plus its desk margin) into the viewport. */

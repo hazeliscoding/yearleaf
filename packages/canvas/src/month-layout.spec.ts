@@ -151,7 +151,7 @@ describe('monthForVisibleRect', () => {
     // rule reported the sliver when the boundary fell the wrong side of it.
     const october = monthOrigin(2026, 9);
     const rect = around({ x: october.x, y: october.y - 120 }, MONTH_STRIDE_X, MONTH_STRIDE_Y);
-    expect(monthForVisibleRect(rect)).toEqual({ year: 2026, monthIndex: 9 });
+    expect(monthForVisibleRect(rect)).toMatchObject({ year: 2026, monthIndex: 9 });
   });
 
   it('goes by how much of each month is showing, not by a boundary', () => {
@@ -160,11 +160,11 @@ describe('monthForVisibleRect', () => {
     // which is how a view of one month came to be labelled as another.
     const august = monthOrigin(2026, 7);
     const mostlyAugust = around({ x: august.x, y: august.y - 200 }, MONTH_W, MONTH_H);
-    expect(monthForVisibleRect(mostlyAugust)).toEqual({ year: 2026, monthIndex: 7 });
+    expect(monthForVisibleRect(mostlyAugust)).toMatchObject({ year: 2026, monthIndex: 7 });
 
     // Tip the same rectangle the other way and the answer follows the area.
     const mostlyMay = around({ x: august.x, y: august.y - MONTH_H + 200 }, MONTH_W, MONTH_H);
-    expect(monthForVisibleRect(mostlyMay)).toEqual({ year: 2026, monthIndex: 4 });
+    expect(monthForVisibleRect(mostlyMay)).toMatchObject({ year: 2026, monthIndex: 4 });
   });
 
   it('answers with the nearest month when no calendar is on screen', () => {
@@ -172,6 +172,30 @@ describe('monthForVisibleRect', () => {
     // still has to say where you are.
     const away = around({ x: MONTH_STRIDE_X * 4, y: 0 }, 400, 400);
     expect(monthForVisibleRect(away).year).toBe(2020);
+  });
+});
+
+describe('how much of the view one month covers', () => {
+  it('reports a month that fills the screen as covering nearly all of it', () => {
+    // The navigator names a month only when one is really being read. Zoomed
+    // inside September, September is all there is.
+    const inside = cellRectForDate(new Date(2026, 8, 17));
+    expect(monthForVisibleRect(inside).coverage).toBeCloseTo(1, 2);
+  });
+
+  it('reports a whole year as giving each month about a twelfth', () => {
+    const block = yearRect(2026);
+    const coverage = monthForVisibleRect(block).coverage;
+    expect(coverage).toBeLessThan(0.12);
+    expect(coverage).toBeGreaterThan(0.04);
+  });
+
+  it('separates the two cases by a wide margin', () => {
+    // The gap between them is what lets the navigator switch between naming a
+    // month and naming a year without the threshold being a guess.
+    const oneMonth = monthForVisibleRect(monthRect(2026, 8)).coverage;
+    const wholeYear = monthForVisibleRect(yearRect(2026)).coverage;
+    expect(oneMonth).toBeGreaterThan(wholeYear * 5);
   });
 });
 

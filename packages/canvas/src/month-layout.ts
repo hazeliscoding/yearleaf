@@ -172,7 +172,12 @@ export function monthFromOrdinal(ordinal: number): { year: number; monthIndex: n
  * than any single month can meaningfully claim, and the caller is showing a
  * year rather than a month anyway.
  */
-export function monthForVisibleRect(rect: WorldRect): { year: number; monthIndex: number } {
+export function monthForVisibleRect(rect: WorldRect): {
+  year: number;
+  monthIndex: number;
+  /** How much of the view that month covers, 0–1. About 1/12 at a year view. */
+  coverage: number;
+} {
   const firstYearRow = Math.floor(rect.y / YEAR_STRIDE_Y);
   const lastYearRow = Math.min(
     Math.floor((rect.y + rect.height) / YEAR_STRIDE_Y),
@@ -198,11 +203,16 @@ export function monthForVisibleRect(rect: WorldRect): { year: number; monthIndex
     }
   }
 
+  const viewArea = Math.max(1, rect.width * rect.height);
+  if (best) return { ...best, coverage: bestArea / viewArea };
+
   // Nothing of the calendar is in view — the desk east of the columns, say.
   // The nearest month to the centre is still the honest answer there.
-  return (
-    best ?? monthForWorldPoint({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })
-  );
+  const nearest = monthForWorldPoint({
+    x: rect.x + rect.width / 2,
+    y: rect.y + rect.height / 2,
+  });
+  return { ...nearest, coverage: 0 };
 }
 
 /**

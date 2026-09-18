@@ -5,6 +5,7 @@
 
 import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 
+import { dateForWorldPoint } from '@infinite-desk/canvas';
 import type { EventRecord } from '@infinite-desk/domain';
 import { DbCommandPalette, type DbPaletteItem } from '@infinite-desk/deskbound';
 
@@ -180,6 +181,17 @@ export class App {
           this.selection.select(object.payload.kind, id);
           return true;
         },
+        // The date under the middle of the screen, for asserting what a step
+        // did at a zoom where no month name is drawn.
+        dateAtCenter: () => {
+          const hit = dateForWorldPoint(this.viewport.centerWorld());
+          if (!hit) return null;
+          return {
+            day: hit.date.getDate(),
+            month: hit.date.getMonth(),
+            year: hit.date.getFullYear(),
+          };
+        },
         toScreen: (x: number, y: number) => {
           const v = this.viewport.viewport();
           return { x: v.panX + x * v.zoom, y: v.panY + y * v.zoom };
@@ -249,6 +261,7 @@ export class App {
     // as a text field costs the shortcut everything and protects nothing: the
     // inspector's toggles left Ctrl+Z unreachable until the user happened to
     // click elsewhere, which reads as undo being broken.
+    const holdsModifier = event.metaKey || event.ctrlKey;
     const inputType = tag === 'input' ? (target as HTMLInputElement).type : '';
     const textual = tag === 'input' && inputType !== 'checkbox' && inputType !== 'radio';
     // `tools.editing()` covers the frame between an editor appearing and
@@ -277,16 +290,21 @@ export class App {
       return;
     }
     if (event.key === ' ') {
+      // Space is how a focused button is pressed. Swallowing it for the pan
+      // gesture left the toolbar's own controls unusable from the keyboard.
+      if (tag === 'button' || tag === 'select' || tag === 'summary') return;
       event.preventDefault();
       this.tools.spaceHeld.set(true);
       return;
     }
-    // The pointerless route to the next month. Arrow keys are spoken for by
-    // nudging a selected object, and these are what a calendar is expected to
-    // answer to anyway.
-    if (event.key === 'PageDown' || event.key === 'PageUp') {
+    // Pointerless routes to the next month. PageUp/PageDown is the convention,
+    // but a laptop keyboard without those keys needs the modified arrows —
+    // bare arrows are spoken for by nudging a selected object.
+    const stepBack = event.key === 'PageUp' || (holdsModifier && event.key === 'ArrowLeft');
+    const stepOn = event.key === 'PageDown' || (holdsModifier && event.key === 'ArrowRight');
+    if (stepBack || stepOn) {
       event.preventDefault();
-      this.viewport.step(event.key === 'PageDown' ? 1 : -1);
+      this.viewport.step(stepOn ? 1 : -1);
       return;
     }
 

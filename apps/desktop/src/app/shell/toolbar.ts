@@ -31,7 +31,6 @@ import { ViewportStore, type Tier } from '../state/viewport-store';
     <button db-button variant="subtle" (click)="goToday.emit()">Today</button>
     <db-date-navigator
       [label]="viewport.navLabel()"
-      [zoomLabel]="viewport.tier()"
       [unit]="viewport.navUnit()"
       (jump)="openPalette.emit()"
       (previous)="viewport.step(-1)"

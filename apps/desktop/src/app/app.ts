@@ -292,6 +292,14 @@ export class App {
       else this.history.undo();
       return;
     }
+    // What a Windows keyboard reaches for first, and free on macOS — accepting
+    // it everywhere beats a platform check that would be a second thing to
+    // keep in step with the hints.
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'y') {
+      event.preventDefault();
+      this.history.redo();
+      return;
+    }
     if (event.key === ' ') {
       // Space is how a focused button is pressed. Swallowing it for the pan
       // gesture left the toolbar's own controls unusable from the keyboard.

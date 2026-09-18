@@ -3,9 +3,10 @@
  * hint, and a hover/focus tooltip.
  */
 
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 
 import { DbIcon } from './icon';
+import { DB_MODIFIER_CAP, resolveHint } from './platform';
 import type { IconName } from '../icons/icon-registry';
 
 @Component({
@@ -24,14 +25,14 @@ import type { IconName } from '../icons/icon-registry';
       (click)="pressed.emit()"
     >
       <db-icon [name]="icon()" />
-      @if (shortcut(); as key) {
+      @if (hint(); as key) {
         <span class="db-tool-key">{{ key }}</span>
       }
     </button>
     @if (label(); as text) {
       <span class="db-tip" role="tooltip">
         {{ text }}
-        @if (shortcut(); as key) {
+        @if (hint(); as key) {
           <span class="db-kbd"><kbd>{{ key }}</kbd></span>
         }
       </span>
@@ -43,7 +44,7 @@ export class DbToolButton {
   readonly icon = input.required<IconName>();
   /** Accessible name and tooltip text. */
   readonly label = input<string | null>(null);
-  /** Single-key shortcut hint, e.g. `"V"`. */
+  /** Shortcut hint as `+`-separated logical caps, e.g. `"V"` or `"Mod+Z"`. */
   readonly shortcut = input<string | null>(null);
   /** `true` when this tool is the active one. */
   readonly active = input(false);
@@ -53,4 +54,12 @@ export class DbToolButton {
   readonly disabled = input(false);
   /** Emits when the button is clicked. */
   readonly pressed = output<void>();
+
+  private readonly modifier = inject(DB_MODIFIER_CAP);
+
+  /** {@link shortcut} written for this platform's keyboard. */
+  protected readonly hint = computed(() => {
+    const shortcut = this.shortcut();
+    return shortcut === null ? null : resolveHint(shortcut, this.modifier);
+  });
 }

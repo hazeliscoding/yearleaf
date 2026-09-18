@@ -39,7 +39,7 @@ import { TOOL_GROUPS, ToolStore } from '../state/tool-store';
     <db-tool-button
       icon="undo-2"
       label="Undo"
-      shortcut="⌘Z"
+      shortcut="Mod+Z"
       [disabled]="!history.canUndo()"
       (pressed)="history.undo()"
     />

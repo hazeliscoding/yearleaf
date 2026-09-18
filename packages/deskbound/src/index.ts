@@ -7,6 +7,7 @@
  */
 
 export * from './icons/icon-registry';
+export * from './core/platform';
 export * from './core/icon';
 export * from './core/button';
 export * from './core/tool-button';

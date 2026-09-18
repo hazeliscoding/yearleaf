@@ -7,6 +7,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import { DbIcon } from '../core/icon';
 import { DbKbd } from '../core/kbd';
+import { MOD } from '../core/platform';
 
 @Component({
   selector: 'db-date-navigator',
@@ -56,11 +57,14 @@ import { DbKbd } from '../core/kbd';
          and already says it, and repeating it beside arrows whose unit it no
          longer governs made it read as a rule it does not state. -->
     <button class="db-btn db-btn--sm db-btn--subtle" style="margin-left:10px" (click)="jump.emit()">
-      Jump to date&nbsp;<db-kbd [keys]="['⌘', 'K']" />
+      Jump to date&nbsp;<db-kbd [keys]="jumpKeys" />
     </button>
   `,
 })
 export class DbDateNavigator {
+  /** Palette shortcut, printed with whichever modifier this platform has. */
+  protected readonly jumpKeys = [MOD, 'K'];
+
   /** Position label, e.g. `"September 2026"`. */
   readonly label = input.required<string>();
   /** What one step moves, named in the arrows' accessible labels. */

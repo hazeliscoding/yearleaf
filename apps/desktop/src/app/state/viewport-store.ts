@@ -220,29 +220,33 @@ export class ViewportStore {
    * only on occlusion, and only by the shortfall, costs nothing in the common
    * case and is by construction enough in the rare one.
    *
-   * A rect larger than the view cannot be satisfied at both edges, so the
-   * near edge wins: the far one was already unreachable.
+   * A rect wider than the view cannot be satisfied at both edges, so the near
+   * edge wins: the far one was already unreachable.
+   *
+   * Horizontal only, and deliberately not a general "reveal". A grid column
+   * narrows the canvas; it never shortens it, so a vertical correction here
+   * is movement no reader can attribute to anything they did. It would also
+   * be wrong: the pinned month band is an opaque 39px across the top of the
+   * canvas that this has no way to know about, so honouring a top margin of
+   * 16 parks the revealed rect *under* the band — and the one cell whose date
+   * you cannot read would be the one you just selected. Whoever needs a
+   * vertical reveal can add it, and will have to answer the band first.
    *
    * Instant rather than glided — this is a layout correction inside the same
    * visual event as the panel opening, not somewhere the reader asked to go.
    */
-  revealRect(rect: WorldRect, margin = 0): void {
-    const { width, height } = this.viewSize();
-    const { panX, panY, zoom } = this.state();
+  revealHorizontally(rect: WorldRect, margin = 0): void {
+    const { width } = this.viewSize();
+    const { panX, zoom } = this.state();
     const left = panX + rect.x * zoom;
-    const top = panY + rect.y * zoom;
     const right = left + rect.width * zoom;
-    const bottom = top + rect.height * zoom;
 
     let dx = 0;
     if (right > width - margin) dx = width - margin - right;
     if (left + dx < margin) dx = margin - left;
-    let dy = 0;
-    if (bottom > height - margin) dy = height - margin - bottom;
-    if (top + dy < margin) dy = margin - top;
 
-    if (dx === 0 && dy === 0) return;
-    this.state.update((s) => ({ ...s, panX: s.panX + dx, panY: s.panY + dy }));
+    if (dx === 0) return;
+    this.state.update((s) => ({ ...s, panX: s.panX + dx }));
   }
 
   /** Translates the viewport by a screen-space delta (gesture; no animation). */

@@ -18,6 +18,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 
@@ -68,9 +69,14 @@ const HANDLE_RADIUS = 16;
 /** Zoom applied per unit of wheel delta, as an exponent. One notch is ~120. */
 const WHEEL_ZOOM_RATE = 0.0015;
 /**
- * Screen-pixel gap left around a selection the inspector would have covered,
- * so an object it uncovers does not sit flush against the panel edge reading
- * as clipped.
+ * Screen-pixel gap left between a selection the inspector would have covered
+ * and the panel edge.
+ *
+ * Measured to the object's own bounds, which is not what the eye sees: the
+ * scene draws the selection outline at bounds+4 and centres 12px handles on
+ * that, so about 11px of chrome overhangs into this gap and roughly 5 are
+ * left bare. An event chip keeps the full 16 and more, because its rect here
+ * is the day cell and the outline is drawn on the chip inside it.
  */
 const REVEAL_MARGIN = 16;
 
@@ -300,6 +306,20 @@ export class Workspace {
       if (this.sceneReady()) this.scene.setSelection(id);
     });
     effect(() => {
+      // Changing selection while the panel is already open is not a resize, so
+      // the observer below never hears about it — and the second object is
+      // exactly as coverable as the first was. On the first selection this
+      // runs before the column has laid out, finds nothing occluded and does
+      // nothing; the observer then does the real work.
+      //
+      // Untracked on purpose: `selectedRect` reads the desk, so tracking it
+      // would re-run on every position change and shove the desk along while
+      // an object is being dragged towards the panel.
+      const selected = this.selection.selection();
+      if (!selected || !this.sceneReady()) return;
+      untracked(() => this.revealSelection());
+    });
+    effect(() => {
       const id = this.editingId();
       if (this.sceneReady()) this.scene.setEditing(id);
     });
@@ -380,8 +400,7 @@ export class Workspace {
         // Opening the inspector is a resize: it is a grid column, so the cell
         // narrows and the strip it takes stops being reachable. Read the
         // selection after the new size is recorded, never before.
-        const selected = this.selectedRect();
-        if (selected) this.viewport.revealRect(selected, REVEAL_MARGIN);
+        this.revealSelection();
       }
     });
     resizeObserver.observe(this.host);
@@ -428,6 +447,20 @@ export class Workspace {
   /** Guards the rebuild below so panning does not re-expand every series. */
   private contentKey = '';
   private contentEvents: unknown = null;
+
+  /**
+   * Brings the selection out from under the inspector, if it is under it.
+   *
+   * Skipped mid-glide rather than cancelling one: a flight is somewhere the
+   * reader actually asked to go, and the tick that follows captures its
+   * endpoints from launch, so a pan applied here would be overwritten a frame
+   * later anyway — visible only as a lurch and a snap back.
+   */
+  private revealSelection(): void {
+    if (this.viewport.flying()) return;
+    const selected = this.selectedRect();
+    if (selected) this.viewport.revealHorizontally(selected, REVEAL_MARGIN);
+  }
 
   /**
    * World rect of whatever is selected, for the reveal above.

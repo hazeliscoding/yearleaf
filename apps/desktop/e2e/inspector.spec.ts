@@ -37,6 +37,7 @@ declare global {
       selectEvent(id: string): boolean;
       select(id: string): boolean;
       viewport(): { panX: number; panY: number; zoom: number };
+      panTo(x: number, y: number): void;
       toScreen(x: number, y: number): { x: number; y: number };
     };
   }
@@ -155,6 +156,61 @@ test('selecting something already clear of the panel does not move the desk', as
   // slide the whole desk on every selection, shearing the far column off the
   // opposite edge to uncover something that was never covered.
   expect(await page.evaluate(() => window.__e2e.viewport())).toEqual(before);
+});
+
+test('selecting a second object with the panel already open uncovers it too', async ({ page }) => {
+  await openWorkspace(page);
+  const [first, second] = await floats(page);
+
+  await page.evaluate((id) => window.__e2e.select(id), first.id);
+  await expect(inspectorShowing(page)).toBeVisible();
+  const narrow = await canvasWidth(page);
+
+  // Park the second object under the panel while the inspector is open.
+  const v = await page.evaluate(() => window.__e2e.viewport());
+  await page.evaluate(
+    ([px, py]) => window.__e2e.panTo(px, py),
+    [narrow - 20 - second.x * v.zoom, v.panY],
+  );
+  const rightEdge = async () =>
+    (
+      await page.evaluate(
+        ([x, y]) => window.__e2e.toScreen(x, y),
+        [second.x + second.width, second.y],
+      )
+    ).x;
+  expect(await rightEdge()).toBeGreaterThan(narrow);
+
+  // Changing selection while the panel is already open is not a resize, so
+  // nothing told the viewport about it — and the second object is exactly as
+  // coverable as the first one was. This is the original bug, one selection
+  // later, and it is the more common flow of the two.
+  await page.evaluate((id) => window.__e2e.select(id), second.id);
+  await expect.poll(rightEdge).toBeLessThanOrEqual(narrow);
+});
+
+test('a selection hanging off the bottom is left exactly where it is', async ({ page }) => {
+  await openWorkspace(page);
+  const target = (await floats(page))[0];
+  const height = (await canvas(page).boundingBox())!.height;
+
+  // Well clear of the panel horizontally, and hanging off the bottom edge.
+  const v = await page.evaluate(() => window.__e2e.viewport());
+  await page.evaluate(
+    ([px, py]) => window.__e2e.panTo(px, py),
+    [200 - target.x * v.zoom, height - 30 - target.y * v.zoom],
+  );
+  const before = await page.evaluate(() => window.__e2e.viewport());
+
+  await page.evaluate((id) => window.__e2e.select(id), target.id);
+  await expect(inspectorShowing(page)).toBeVisible();
+
+  // A grid column narrows the canvas; it never shortens it. Correcting the
+  // axis the panel does not touch is movement with no cause a reader can see
+  // — and it drives the rect under the pinned month band, which covers the
+  // top 39px, so the one thing you just selected becomes the one thing you
+  // cannot read.
+  expect((await page.evaluate(() => window.__e2e.viewport())).panY).toBe(before.panY);
 });
 
 test('typing a position moves the note it is describing', async ({ page }) => {

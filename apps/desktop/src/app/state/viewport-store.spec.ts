@@ -9,7 +9,7 @@ const VIEW = { width: 1400, height: 900 };
 /** What the inspector takes when it opens, in CSS pixels. */
 const PANEL = 264;
 
-describe('ViewportStore.revealRect', () => {
+describe('ViewportStore.revealHorizontally', () => {
   let store: ViewportStore;
 
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe('ViewportStore.revealRect', () => {
     const rect = atScreen(200, 300, 260, 180);
     const before = store.viewport();
 
-    store.revealRect(rect, 16);
+    store.revealHorizontally(rect, 16);
 
     // The property the centre-preserving rule could not offer: selecting
     // something already on screen must not move the world at all.
@@ -58,7 +58,7 @@ describe('ViewportStore.revealRect', () => {
     const overhang = onScreen(rect).right - (VIEW.width - 16);
     expect(overhang).toBeGreaterThan(0);
 
-    store.revealRect(rect, 16);
+    store.revealHorizontally(rect, 16);
 
     expect(onScreen(rect).right).toBeCloseTo(VIEW.width - 16, 6);
     // Least distance: the pan moved by the overhang and not a pixel more,
@@ -68,31 +68,33 @@ describe('ViewportStore.revealRect', () => {
     expect(store.viewport().zoom).toBe(before.zoom);
   });
 
-  it('brings a rect back inside the bottom edge the same way', () => {
-    const rect = atScreen(200, VIEW.height + 30, 260, 180);
+  it('never moves vertically, however far off the bottom the rect hangs', () => {
+    const rect = atScreen(200, VIEW.height + 300, 260, 180);
     const before = store.viewport();
 
-    store.revealRect(rect, 16);
+    store.revealHorizontally(rect, 16);
 
-    expect(onScreen(rect).bottom).toBeCloseTo(VIEW.height - 16, 6);
+    // A grid column narrows the canvas; it never shortens it. Correcting the
+    // axis the panel does not touch is movement a reader cannot attribute to
+    // anything — and it drives the rect under the pinned month band, which
+    // covers the top 39px and which this has no way to know about.
+    expect(store.viewport().panY).toBe(before.panY);
     expect(store.viewport().panX).toBe(before.panX);
   });
 
-  it('shows the near edge of a rect too big to fit rather than its far one', () => {
-    // Wider and taller than the viewport: honouring the far edge would push
-    // the near one off, which is the worse half of it to lose.
-    const rect = atScreen(-200, -150, VIEW.width + 600, VIEW.height + 400);
+  it('shows the near edge of a rect too wide to fit rather than its far one', () => {
+    // Wider than the viewport: honouring the far edge would push the near one
+    // off, which is the worse half of it to lose.
+    const rect = atScreen(-200, 150, VIEW.width + 600, 200);
 
-    store.revealRect(rect, 16);
+    store.revealHorizontally(rect, 16);
 
-    const painted = onScreen(rect);
-    expect(painted.left).toBeCloseTo(16, 6);
-    expect(painted.top).toBeCloseTo(16, 6);
+    expect(onScreen(rect).left).toBeCloseTo(16, 6);
   });
 
   it('does not scale anything: revealing is a pan', () => {
     const zoom = store.viewport().zoom;
-    store.revealRect(atScreen(VIEW.width + 400, 300, 260, 180), 16);
+    store.revealHorizontally(atScreen(VIEW.width + 400, 300, 260, 180), 16);
     expect(store.viewport().zoom).toBe(zoom);
   });
 });

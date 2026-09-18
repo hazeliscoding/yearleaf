@@ -36,6 +36,9 @@ async function openWorkspace(page: Page): Promise<void> {
 
 const events = (page: Page) => page.evaluate(() => window.__e2e.events());
 
+/** The month the navigator names — proof that navigation keys still land. */
+const navLabel = (page: Page) => page.locator('db-date-navigator span').first().textContent();
+
 async function canvasCentre(page: Page): Promise<{ x: number; y: number }> {
   const box = (await page.locator('[data-screen-label="Canvas"]').boundingBox())!;
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -81,6 +84,32 @@ test('an untitled event is discarded rather than left blank', async ({ page }) =
   await page.keyboard.press('Escape');
 
   expect((await events(page)).length).toBe(before);
+});
+
+test('Enter commits an event title and gives the keyboard back', async ({ page }) => {
+  await openWorkspace(page);
+  const before = (await events(page)).length;
+  await expect.poll(() => navLabel(page)).toContain('September 2026');
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Advisor meeting');
+  await page.keyboard.press('Enter');
+
+  // Enter is an exit, like Tab, Escape and clicking away. It used to be the
+  // one that was not: it put a newline in a one-line box and held focus.
+  await expect(page.getByLabel('Edit text')).toBeHidden();
+  const after = await events(page);
+  expect(after.length).toBe(before + 1);
+  expect(after.at(-1)!.title).toBe('Advisor meeting');
+
+  // And the keyboard belongs to the app again. This is the symptom Marcus
+  // reported: every navigation key died in the draft, so the app read as
+  // frozen while the title scrolled out of sight.
+  await page.keyboard.press('PageDown');
+  await expect.poll(() => navLabel(page)).toContain('October 2026');
 });
 
 test('a weekly series is stored once and drawn on every matching date', async ({ page }) => {

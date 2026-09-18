@@ -106,6 +106,7 @@ const WHEEL_ZOOM_RATE = 0.0015;
         [placeholder]="edit.placeholder"
         [value]="edit.text"
         (blur)="commitEditor($event)"
+        (keydown)="onEditorKeyDown($event, edit.singleLine)"
         (keydown.escape)="$any($event.target).blur(); $event.stopPropagation()"
         (pointerdown)="$event.stopPropagation()"
         [style.left.px]="edit.left"
@@ -192,6 +193,8 @@ export class Workspace {
       const cell = cellRectForDate(pendingDate ?? event!.occurrenceDate ?? event!.date);
       const inset = 10;
       return {
+        // A title is one line, and the box is drawn one line tall.
+        singleLine: true,
         text: event?.title ?? '',
         placeholder: 'Event name',
         left: v.panX + (cell.x + inset) * v.zoom,
@@ -211,6 +214,7 @@ export class Workspace {
     if (pending) {
       const v = this.viewport.viewport();
       return {
+        singleLine: false,
         text: '',
         placeholder: 'Write on the desk…',
         left: v.panX + pending.x * v.zoom,
@@ -239,6 +243,9 @@ export class Workspace {
     const baseLine = checklist ? 30 : sticky ? (compact ? 26 : 32) : 38;
     const hand = checklist ? false : sticky ? !!sticky.hand : true;
     return {
+      // Lines are the content here: a text object keeps them, and a checklist
+      // stores one item per line.
+      singleLine: false,
       text: checklist
         ? checklist.map((item) => item.label).join('\n')
         : object.payload.kind === 'sticky' || object.payload.kind === 'text'
@@ -656,6 +663,29 @@ export class Workspace {
     this.transientRect = null;
     this.pan = null;
     if (this.tools.panning()) this.tools.panning.set(false);
+  }
+
+  /**
+   * Makes Enter an exit from a one-line editor, like Tab, Escape and clicking
+   * away already are.
+   *
+   * Every editor here is the same `textarea`, including the event title's
+   * one-line box, so Enter's default was to insert a newline the box is not
+   * tall enough to show and keep focus. That left the draft looking empty and
+   * killed every navigation key behind the `typing` guard in `App.onKeyDown`,
+   * which reads as the whole application freezing.
+   *
+   * It blurs rather than calling {@link commitEditor} directly so all four
+   * exits stay one commit path. The key is compared rather than bound as
+   * `keydown.enter` because that pseudo-event ignores Shift+Enter, which would
+   * put a newline in the one-line box by another route.
+   */
+  protected onEditorKeyDown(event: KeyboardEvent, singleLine: boolean): void {
+    if (!singleLine || event.key !== 'Enter') return;
+    // Before the blur, so no newline is in the value that gets committed.
+    event.preventDefault();
+    event.stopPropagation();
+    (event.target as HTMLTextAreaElement).blur();
   }
 
   /** Commits the DOM editor's content as one command and closes it. */

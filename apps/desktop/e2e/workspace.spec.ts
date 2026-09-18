@@ -162,3 +162,31 @@ test('checklist stickies edit line-per-line and keep done state by position', as
   expect(items.map((i) => i.label)).toEqual([...labels, 'buy stamps']);
   expect(items.map((i) => !!i.done)).toEqual([...doneBefore, false]);
 });
+
+test('Enter opens a new line where lines are the content', async ({ page }) => {
+  await openWorkspace(page);
+  const sticky = (await floats(page)).find((f) => f.payload.items?.length);
+  const labels = sticky!.payload.items!.map((i) => i.label);
+
+  await centerOn(page, sticky!.x + sticky!.width / 2, sticky!.y + sticky!.height / 2);
+  const center = await screenPoint(
+    page,
+    sticky!.x + sticky!.width / 2,
+    sticky!.y + sticky!.height / 2,
+  );
+  await page.mouse.dblclick(center.x, center.y);
+  const editor = page.getByLabel('Edit text');
+  await expect(editor).toBeVisible();
+
+  // A checklist is one item per line, so Enter has to keep meaning "newline"
+  // here even though it commits an event title. Typing it is the gesture that
+  // adds an item, and the editor must stay open to receive the item.
+  await page.keyboard.press('Control+End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('buy stamps');
+  await expect(editor).toBeFocused();
+  await page.keyboard.press('Escape');
+
+  const items = (await floats(page)).find((f) => f.id === sticky!.id)!.payload.items!;
+  expect(items.map((i) => i.label)).toEqual([...labels, 'buy stamps']);
+});

@@ -189,6 +189,8 @@ export class Workspace {
 
   private drag: DragState | null = null;
   private resizeGesture: ResizeState | null = null;
+  /** A reveal a live gesture refused, owed back when that gesture ends. */
+  private revealPending = false;
   private transientRect: WorldRect | null = null;
   private pan: { startClientX: number; startClientY: number; startPanX: number; startPanY: number } | null = null;
 
@@ -462,12 +464,20 @@ export class Workspace {
    * object leaps by the width of the pan and pointer-up commits the leap as
    * an ordinary move. Pressing a note the panel was about to cover shifted it
    * 611 world units without the pointer travelling horizontally at all. The
-   * gesture ends by calling this again, which is when the correction is both
-   * safe and still wanted.
+   * A reveal refused for that reason is remembered and retried when the hand
+   * comes off the desk, which is when the correction is both safe and still
+   * wanted. Remembered specifically, rather than retried on every pointer-up:
+   * the gesture handlers listen on the document, so a press anywhere in the
+   * app arrives there too, and treating all of them as retries turned a click
+   * on the theme toggle into a jump back to whatever happened to be selected.
    */
   private revealSelection(): void {
     if (this.viewport.flying()) return;
-    if (this.drag || this.resizeGesture || this.pan) return;
+    if (this.drag || this.resizeGesture || this.pan) {
+      this.revealPending = true;
+      return;
+    }
+    this.revealPending = false;
     const selected = this.selectedRect();
     if (selected) this.viewport.revealHorizontally(selected, REVEAL_MARGIN);
   }
@@ -737,10 +747,9 @@ export class Workspace {
     this.transientRect = null;
     this.pan = null;
     if (this.tools.panning()) this.tools.panning.set(false);
-    // The press that opened the inspector had its reveal held back until the
-    // hand came off the desk. This is that moment, and the object may well
-    // still be under the panel.
-    this.revealSelection();
+    // Only if this gesture actually held one back. Pointer-up is a document
+    // listener, so most of the presses arriving here never touched the canvas.
+    if (this.revealPending) this.revealSelection();
   }
 
   /**

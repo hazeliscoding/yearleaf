@@ -237,8 +237,14 @@ test('pressing an object the panel will cover does not drag it sideways', async 
   // the grab offset is recorded in world units at pointer-down, so a reveal
   // between down and move re-bases the coordinates under an anchor that was
   // measured against the old ones, and pointer-up commits the difference.
+  const wide = await canvasWidth(page);
   await page.mouse.move(box.x + at.x, box.y + at.y);
   await page.mouse.down();
+  // Wait for the panel to take its width while the pointer is still down, so
+  // the move below lands in the interval that does the damage rather than
+  // racing it.
+  await expect(inspectorShowing(page)).toBeVisible();
+  await expect.poll(() => canvasWidth(page)).toBeLessThan(wide);
   await page.mouse.move(box.x + at.x, box.y + at.y + 1);
   await page.mouse.up();
 
@@ -255,6 +261,26 @@ test('pressing an object the panel will cover does not drag it sideways', async 
     )
   ).x;
   expect(rightEdge).toBeLessThanOrEqual(narrow);
+});
+
+test('a click on the chrome does not yank the desk back to the selection', async ({ page }) => {
+  await openWorkspace(page);
+  const target = (await floats(page))[0];
+  await page.evaluate((id) => window.__e2e.select(id), target.id);
+  await expect(inspectorShowing(page)).toBeVisible();
+
+  // Scroll the selection well off-screen, keeping it selected.
+  const v = await page.evaluate(() => window.__e2e.viewport());
+  await page.evaluate(([px, py]) => window.__e2e.panTo(px, py), [v.panX - 2000, v.panY]);
+  const before = await page.evaluate(() => window.__e2e.viewport());
+
+  // The gesture guard listens on `document:pointerup`, so every click in the
+  // app arrives here — including ones that are not canvas gestures and never
+  // deferred anything. Retrying on all of them turns a press on the toolbar
+  // into a jump back to whatever happens to be selected.
+  await page.locator('button[title="Toggle theme"]').click();
+
+  expect(await page.evaluate(() => window.__e2e.viewport())).toEqual(before);
 });
 
 test('typing a position moves the note it is describing', async ({ page }) => {

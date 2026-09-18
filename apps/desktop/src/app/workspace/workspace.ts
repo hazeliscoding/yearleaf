@@ -181,7 +181,7 @@ export class Workspace {
   private transientRect: WorldRect | null = null;
   private pan: { startClientX: number; startClientY: number; startPanX: number; startPanY: number } | null = null;
 
-  /** Screen-space geometry and styling of the DOM text editor. */
+  /** Screen-space geometry, styling and input semantics of the DOM text editor. */
   protected readonly editor = computed(() => {
     const eventId = this.editingEventId();
     const pendingDate = this.pendingEventDate();
@@ -193,7 +193,9 @@ export class Workspace {
       const cell = cellRectForDate(pendingDate ?? event!.occurrenceDate ?? event!.date);
       const inset = 10;
       return {
-        // A title is one line, and the box is drawn one line tall.
+        // The box is drawn one line tall, so Enter exits it rather than
+        // opening a line it cannot show. That exit is all this claims: a
+        // pasted newline still reaches the title (recorded in the roadmap).
         singleLine: true,
         text: event?.title ?? '',
         placeholder: 'Event name',
@@ -679,8 +681,21 @@ export class Workspace {
    * exits stay one commit path. The key is compared rather than bound as
    * `keydown.enter` because that pseudo-event ignores Shift+Enter, which would
    * put a newline in the one-line box by another route.
+   *
+   * `singleLine` is a required `boolean` rather than an optional flag on
+   * purpose: with `strict` on, a mode that forgets to answer makes this call
+   * site a compile error. Spelling it `singleLine?: boolean`, or defaulting it
+   * with `?? false` in the template, throws that tripwire away.
    */
   protected onEditorKeyDown(event: KeyboardEvent, singleLine: boolean): void {
+    // Mid-composition, Enter belongs to the input method: it chooses a
+    // candidate, and the words so far are a reading rather than a title. The
+    // old newline behaviour absorbed this harmlessly, so committing here is a
+    // defect this exit introduces — it would store かいぎ and take the box
+    // away mid-word, leaving no way to type a title in Japanese or Chinese.
+    // `isComposing` is the modern signal; keyCode 229 is what browsers send
+    // instead while an IME owns the key, and costs nothing to keep.
+    if (event.isComposing || event.keyCode === 229) return;
     if (!singleLine || event.key !== 'Enter') return;
     // Before the blur, so no newline is in the value that gets committed.
     event.preventDefault();

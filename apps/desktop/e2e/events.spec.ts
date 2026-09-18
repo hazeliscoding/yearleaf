@@ -112,6 +112,69 @@ test('Enter commits an event title and gives the keyboard back', async ({ page }
   await expect.poll(() => navLabel(page)).toContain('October 2026');
 });
 
+test('Shift+Enter commits too, rather than smuggling in a newline', async ({ page }) => {
+  await openWorkspace(page);
+  const before = (await events(page)).length;
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Advisor meeting');
+  await page.keyboard.press('Shift+Enter');
+
+  // This is the whole reason the handler compares `event.key` instead of
+  // binding Angular's `keydown.enter`, which matches only the unmodified key
+  // and would let Shift+Enter put a newline in the one-line box.
+  await expect(page.getByLabel('Edit text')).toBeHidden();
+  const after = await events(page);
+  expect(after.length).toBe(before + 1);
+  expect(after.at(-1)!.title).toBe('Advisor meeting');
+});
+
+test('the Enter that confirms an IME candidate does not commit the title', async ({ page }) => {
+  await openWorkspace(page);
+  const before = (await events(page)).length;
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  const editor = page.getByLabel('Edit text');
+  await expect(editor).toBeFocused();
+
+  // A real composition in the box, driven through the same CDP input path the
+  // browser uses for a CJK IME. Chromium then reports `isComposing` on a real
+  // keypress, so the Enter below is genuine rather than synthesised.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.imeSetComposition', {
+    text: 'かいぎ',
+    selectionStart: 3,
+    selectionEnd: 3,
+  });
+  await expect(editor).toHaveValue('かいぎ');
+
+  // Enter here means "take this candidate", not "I am done". Committing on it
+  // stores the reading — かいぎ — and takes the box away mid-word, which makes
+  // an event title untypable in Japanese or Chinese.
+  await page.keyboard.press('Enter');
+  await expect(editor).toBeFocused();
+  expect((await events(page)).length).toBe(before);
+
+  // Once the candidate is settled and the composition is over, Enter is an
+  // exit again — the guard must not cost the language its way out. The box's
+  // own value is not asserted between here and the commit: no input method is
+  // really attached, so the Enter above fell through to the default and left a
+  // newline a real IME would have consumed. The committed title is the same
+  // either way, which is why that is what this checks.
+  await cdp.send('Input.insertText', { text: '会議' });
+  await page.keyboard.press('Enter');
+
+  await expect(editor).toBeHidden();
+  const after = await events(page);
+  expect(after.length).toBe(before + 1);
+  expect(after.at(-1)!.title).toBe('会議');
+});
+
 test('a weekly series is stored once and drawn on every matching date', async ({ page }) => {
   await openWorkspace(page);
   const before = (await events(page)).length;

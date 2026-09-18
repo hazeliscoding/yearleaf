@@ -29,6 +29,7 @@ CLAUDE.md
 CLAUDE.local.md
 AGENTS.md
 GEMINI.md
+.codex/
 .cursor/
 .cursorrules
 .cursorignore

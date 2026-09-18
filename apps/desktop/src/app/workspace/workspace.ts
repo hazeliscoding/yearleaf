@@ -346,6 +346,13 @@ export class Workspace {
     this.viewport.setViewSize(width, height);
     this.sceneReady.set(true);
 
+    // Canvas content is not in the DOM, so the pinned band can only be seen
+    // from a test through the scene that draws it.
+    const bridge = (globalThis as unknown as Record<string, unknown>)['__e2e'] as
+      | Record<string, unknown>
+      | undefined;
+    if (bridge) bridge['pinnedMonth'] = () => this.scene.pinnedMonth;
+
     const resizeObserver = new ResizeObserver(() => {
       const w = this.host.clientWidth;
       const h = this.host.clientHeight;

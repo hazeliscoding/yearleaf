@@ -29,6 +29,7 @@ import { SpatialIndex } from '../spatial-index';
 import { tierForZoom, type Point, type ViewportState, type ZoomTier } from '../viewport';
 import { buildMonthView } from './month-view';
 import { buildObjectView } from './object-view';
+import { drawPinnedHeader } from './pinned-header';
 import { parseEventChipId, type SceneHit, type SceneInitOptions } from './scene-types';
 import { boundToTextureCeiling } from './texture-bounds';
 import { readThemeTokens, type ThemeTokens } from './theme';
@@ -61,6 +62,15 @@ export class CalendarSceneController {
   private attachmentLayer!: Container;
   private connectorLayer!: Container;
   private interactionLayer!: Graphics;
+  /**
+   * Screen-space band naming the month in view, above everything.
+   *
+   * Outside `worldRoot` on purpose: it holds still while the desk moves under
+   * it, which is the whole point of a pinned header.
+   */
+  private pinnedHeaderLayer!: Container;
+  /** The month the pinned band is currently naming, if any. */
+  private pinned: { year: number; monthIndex: number } | null = null;
 
   /** Bitmaps already loaded, keyed by attachment id. */
   private readonly textures = new Map<string, Texture>();
@@ -86,6 +96,16 @@ export class CalendarSceneController {
   /** `true` once {@link init} has completed successfully. */
   get ready(): boolean {
     return this.app !== null;
+  }
+
+  /**
+   * The month the pinned band is naming, or `null` while it is hidden.
+   *
+   * Canvas content is not in the DOM, so this is the only way a test can see
+   * whether the band is doing its job.
+   */
+  get pinnedMonth(): { year: number; monthIndex: number } | null {
+    return this.pinned;
   }
 
   /**
@@ -144,12 +164,14 @@ export class CalendarSceneController {
       this.connectorLayer,
       this.interactionLayer,
     );
-    app.stage.addChild(this.gridLayer, this.worldRoot);
+    this.pinnedHeaderLayer = new Container();
+    app.stage.addChild(this.gridLayer, this.worldRoot, this.pinnedHeaderLayer);
     this.app = app;
 
     this.applyViewportToStage();
     this.syncMonths();
     this.redrawGrid();
+    this.redrawPinnedHeader();
     this.markDirty();
   }
 
@@ -176,6 +198,7 @@ export class CalendarSceneController {
     this.app.renderer.resize(width, height);
     this.syncMonths();
     this.redrawGrid();
+    this.redrawPinnedHeader();
     // Resizing clears the canvas buffer; a deferred (markDirty) repaint lets
     // the browser composite one blank frame — visible as a flash whenever
     // the inspector opens or closes. Render synchronously instead.
@@ -189,6 +212,7 @@ export class CalendarSceneController {
     this.applyViewportToStage();
     this.syncMonths();
     this.redrawGrid();
+    this.redrawPinnedHeader();
     this.drawInteraction();
     this.markDirty();
   }
@@ -488,6 +512,30 @@ export class CalendarSceneController {
   }
 
   /** Screen-space paper grid, offset by pan so it scrolls with the world. */
+  /** Rebuilds the pinned month band for the current framing. */
+  private redrawPinnedHeader(): void {
+    const { panX, panY, zoom } = this.viewport;
+    const { width, height } = this.viewSize;
+    this.pinned = drawPinnedHeader(
+      this.pinnedHeaderLayer,
+      {
+        // The true visible rect, not the culling rect: the band reports what
+        // is on screen, and `visibleWorldRect` is deliberately overscanned.
+        visible: {
+          x: -panX / zoom,
+          y: -panY / zoom,
+          width: width / zoom,
+          height: height / zoom,
+        },
+        panX,
+        panY,
+        zoom,
+        viewWidth: width,
+      },
+      this.theme,
+    );
+  }
+
   private redrawGrid(): void {
     const g = this.gridLayer;
     g.clear();

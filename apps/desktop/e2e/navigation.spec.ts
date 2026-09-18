@@ -18,6 +18,7 @@ declare global {
       toScreen(x: number, y: number): { x: number; y: number };
       dateAtCenter(): { day: number; month: number; year: number } | null;
       flying(): boolean;
+      pinnedMonth(): { year: number; monthIndex: number } | null;
     };
   }
 }
@@ -294,5 +295,64 @@ test('a step glides rather than cutting', async ({ page }) => {
   expect(during).not.toBe(before);
   expect(during).not.toBe(after);
   expect(Math.abs(during - before)).toBeLessThan(Math.abs(after - before));
+});
+
+/** Space-drags the canvas upward, the gesture that crosses three months. */
+async function dragUp(page: Page, by: number): Promise<void> {
+  const box = (await page.locator('[data-screen-label="Canvas"]').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.down('Space');
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - by, { steps: 12 });
+  await page.mouse.up();
+  await page.keyboard.up('Space');
+}
+
+const pinned = (page: Page) => page.evaluate(() => window.__e2e.pinnedMonth());
+
+test('a sheet keeps naming itself once its own title is off the top', async ({ page }) => {
+  await openWorkspace(page);
+  // Framed on September, the sheet says its own name and the band stays out —
+  // including over the few pixels of the month above that the fit leaves
+  // showing across the gutter.
+  expect(await pinned(page)).toBeNull();
+
+  await dragUp(page, 420);
+
+  // Drifted into the grid, where every month looks alike.
+  expect(await pinned(page)).toEqual({ year: 2026, monthIndex: 8 });
+});
+
+test('the band names the unlabelled sheet, not the one filling the screen', async ({ page }) => {
+  await openWorkspace(page);
+  await dragUp(page, 420);
+
+  // September's last rows run along the top and December's sheet fills the
+  // rest, header included. December is already saying its name; September is
+  // the one that needs saying — and the one whose presence directly above
+  // December is the whole surprise, since months run three across.
+  expect(await pinned(page)).toEqual({ year: 2026, monthIndex: 8 });
+  await expect.poll(() => navLabel(page)).toContain('December 2026');
+});
+
+test('the drag that crosses a quarter says so as it happens', async ({ page }) => {
+  await openWorkspace(page);
+  await dragUp(page, 420);
+  expect(await pinned(page)).toEqual({ year: 2026, monthIndex: 8 });
+
+  // Carrying on down is the gesture that landed a professional calendar
+  // reader in December while she believed she was in October. The band
+  // changing under her is the announcement that never came.
+  await dragUp(page, 700);
+
+  expect(await pinned(page)).toEqual({ year: 2026, monthIndex: 11 });
+});
+
+test('the band stays out of a whole-year view, where every sheet is titled', async ({ page }) => {
+  await openWorkspace(page);
+  await page.getByRole('radio', { name: 'Year' }).click();
+  await landed(page);
+
+  expect(await pinned(page)).toBeNull();
 });
 

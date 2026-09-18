@@ -86,6 +86,16 @@ describe('planSeam', () => {
     expect(monthFromOrdinal(monthOrdinal(2026, 11) + 3)).toEqual({ year: 2027, monthIndex: 2 });
   });
 
+  it('names the year that begins, in every column of the boundary', () => {
+    // It used to take the successor *month's* year, which is only the block's
+    // successor under December: October's strip read "2026 BEGINS" above a
+    // sheet headed January 2027, so one boundary carried two different years.
+    for (const m of [9, 10, 11]) {
+      const begins = planSeam(2026, m, 'month')!.texts.find((t) => t.tone === 'accent');
+      expect(begins?.text, `month ${m}`).toBe('2027 BEGINS');
+    }
+  });
+
   it('carries the heavier mark and the year at the block boundary', () => {
     const plan = planSeam(2026, 11, 'month')!;
     expect(plan.kind).toBe('year');
@@ -176,27 +186,29 @@ describe('planSeam', () => {
 
 describe('splitRun', () => {
   it('cuts a bar around what sits on its line', () => {
-    expect(splitRun(0, 100, [[40, 60]])).toEqual([
-      [0, 40],
-      [60, 100],
+    expect(splitRun(0, 400, [[160, 240]])).toEqual([
+      [0, 160],
+      [240, 400],
     ]);
   });
 
-  it('drops a run rather than emitting a stub', () => {
-    // A one-unit fragment is a speck, not a rule.
-    expect(splitRun(0, 100, [[0.5, 99.5]])).toEqual([]);
+  it('drops a stub rather than hanging a tick off a label', () => {
+    // A short fragment left beside a word reads as an unfinished one: the
+    // catchword shipped as "January 2027 –" until this had a floor.
+    expect(splitRun(0, 400, [[40, 380]])).toEqual([]);
+    expect(splitRun(0, 400, [[0, 360]])).toEqual([]);
   });
 
   it('handles several breaks and keeps them in order', () => {
-    expect(splitRun(0, 200, [[20, 40], [120, 160]])).toEqual([
-      [0, 20],
-      [40, 120],
-      [160, 200],
+    expect(splitRun(0, 600, [[80, 160], [360, 460]])).toEqual([
+      [0, 80],
+      [160, 360],
+      [460, 600],
     ]);
   });
 
   it('leaves a bar alone when nothing is on its line', () => {
-    expect(splitRun(10, 90, [])).toEqual([[10, 90]]);
-    expect(splitRun(10, 90, [[200, 300]])).toEqual([[10, 90]]);
+    expect(splitRun(10, 900, [])).toEqual([[10, 900]]);
+    expect(splitRun(10, 900, [[2000, 3000]])).toEqual([[10, 900]]);
   });
 });

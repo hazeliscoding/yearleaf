@@ -20,10 +20,15 @@
  * distance — three bars between rows, one down the side gutter where the
  * neighbour really is next. They carry no direction, so they cannot contradict
  * each other the way a row of arrows would, and they stay true read upward.
- * **Type** carries it to an eye that has stopped: `3 MONTHS` twice along the
- * seam, and at a row's end a printer's catchword naming the month the sequence
- * actually continues on, hooked left and down because neither an arrow left
- * nor an arrow down-left is honest about a move that is both.
+ * **Type** carries it to an eye that has stopped: `3 MONTHS` once along the
+ * seam and `1 MONTH` set along the side gutter, and at a row's end a catchword
+ * naming the month the sequence continues on, marked with a stroke that drops
+ * a row and runs back to the start of it.
+ *
+ * The same reader who was caught three times confirmed the distance label
+ * works — "someone finally put a sign on the trapdoor" — and measured the
+ * failure in the first version of the catchword's mark, whose only arrowhead
+ * pointed down, at December, while the word beside it said October.
  */
 
 import { Container, Graphics, Text } from 'pixi.js';
@@ -74,6 +79,10 @@ const SEAM_INSET = 24;
 /** Gutter below a sheet within a year block, and below the last row. */
 const MONTH_GUTTER = 100;
 const YEAR_GUTTER = 240;
+/** Where the one legend sits along a seam. */
+const LEGEND_X = MONTH_W / 2 + 24;
+/** Shorter than this a surviving run is a speck, not a rule. */
+const MIN_RUN = 48;
 /** Air kept around type when a bar is cut to make room for it. */
 const TEXT_CLEARANCE = 14;
 
@@ -103,7 +112,7 @@ export function splitRun(
     }
     runs = next;
   }
-  return runs.filter(([a, b]) => b - a > 1);
+  return runs.filter(([a, b]) => b - a > MIN_RUN);
 }
 
 /**
@@ -145,23 +154,24 @@ export function planSeam(year: number, monthIndex: number, tier: ZoomTier): Seam
   // `3 MONTHS` at every horizontal seam, the year boundary included — below
   // December 2026 really is March 2027. A constant string is recognised rather
   // than read, which is the point for an eye that is moving.
+  // Once per seam, not twice. The same words repeated along one strip read as
+  // texture rather than as a message, and the message is the point.
   const legendY = kind === 'year' ? mid - 18 : mid;
-  for (const lx of [SEAM_INSET, MONTH_W / 2 + SEAM_INSET]) {
-    texts.push({ x: lx, y: legendY, text: '3 MONTHS', size: 34, weight: '500', tone: 'muted' });
-  }
+  texts.push({ x: LEGEND_X, y: legendY, text: '3 MONTHS', size: 34, weight: '500', tone: 'muted' });
   if (kind === 'year') {
-    const begins = monthFromOrdinal(monthOrdinal(year, monthIndex) + 1).year;
-    // The only colour on any seam, spent on the only fact `3 MONTHS` omits.
-    for (const lx of [SEAM_INSET, MONTH_W / 2 + SEAM_INSET]) {
-      texts.push({
-        x: lx,
-        y: mid + 19,
-        text: `${begins} BEGINS`,
-        size: 28,
-        weight: '600',
-        tone: 'accent',
-      });
-    }
+    // The year beyond this boundary, which is the block's year plus one in
+    // every column. Taking the successor *month's* year instead was right only
+    // under December: under October it read "2026 BEGINS" above a sheet headed
+    // January 2027, and one strip carried two different years at once.
+    texts.push({
+      x: LEGEND_X,
+      y: mid + 19,
+      // The only colour on any seam, spent on the only fact `3 MONTHS` omits.
+      text: `${year + 1} BEGINS`,
+      size: 28,
+      weight: '600',
+      tone: 'accent',
+    });
   }
 
   const catchword =
@@ -187,6 +197,9 @@ export function planSeam(year: number, monthIndex: number, tier: ZoomTier): Seam
     // Sideways really is one month, so the side gutter carries one bar. Drawing
     // only the three-bar mark would state half of a binary and leave the other
     // half ambiguous.
+    // Sideways really is one month, so the side gutter carries one bar — and
+    // says so. It is the one direction where the step is a single month and
+    // the desk had declined to mention it.
     verticalBar:
       col < COLS - 1
         ? { x: MONTH_W + MONTH_GUTTER / 2, y0: MONTH_HEADER_H, y1: MONTH_H }
@@ -278,23 +291,26 @@ export function drawSeam(
     label.position.set(MONTH_W - CATCHWORD_INSET - label.width, mid - label.height / 2);
     into.addChild(label);
 
-    // A printer's carriage return: back along the line, then down onto the next
-    // one. Neither a left arrow nor a down-left arrow tells the truth here —
-    // left alone points at August, and the diagonal points through paper at
-    // November. The hook is the move itself, and it is drawn rather than
-    // typeset for the reason recorded on drawRepeatMarker.
-    const hx1 = label.x - 16;
-    const hx0 = hx1 - 40;
+    // Drop a row, then run back to the start of it — and the head points the
+    // way it ends, which is left. It ended pointing *down* at first, and a
+    // reader measured the consequence: the head said "down", the word said
+    // October, and the sheet forty pixels below said December, so the mark
+    // confirmed the very mistake it exists to prevent. Down alone is December,
+    // left alone is August, and the diagonal points through paper at November;
+    // only the drop-then-return is the move. Drawn rather than typeset, for the
+    // reason recorded on drawRepeatMarker.
+    const hx1 = label.x - 18;
+    const hx0 = hx1 - 46;
     const hook = new Graphics();
     hook
-      .moveTo(hx1, mid)
-      .lineTo(hx0 + 6, mid)
-      .lineTo(hx0 + 6, mid + 16)
+      .moveTo(hx1, mid - 10)
+      .lineTo(hx1, mid + 12)
+      .lineTo(hx0 + 12, mid + 12)
       .stroke({ width: 4, color: theme.inkSecondary, cap: 'round', join: 'round' });
     hook
-      .moveTo(hx0 + 6, mid + 28)
-      .lineTo(hx0 - 4, mid + 14)
-      .lineTo(hx0 + 16, mid + 14)
+      .moveTo(hx0, mid + 12)
+      .lineTo(hx0 + 14, mid + 3)
+      .lineTo(hx0 + 14, mid + 21)
       .fill(theme.inkSecondary);
     into.addChild(hook);
     claim(label);
@@ -315,6 +331,27 @@ export function drawSeam(
     bars
       .moveTo(plan.verticalBar.x, plan.verticalBar.y0)
       .lineTo(plan.verticalBar.x, plan.verticalBar.y1);
+
+    // Set along the gutter, because the gutter is a hundred units wide and
+    // "1 MONTH" laid flat is not. Sideways is the one direction where a step
+    // really is a single month, and it was the one direction the desk had
+    // nothing to say about.
+    const sideways = new Text({
+      text: '1 MONTH',
+      style: {
+        fontFamily: theme.fontUI,
+        fontSize: 30,
+        fontWeight: '500',
+        letterSpacing: 2.4,
+        fill: theme.inkMuted,
+      },
+    });
+    sideways.rotation = -Math.PI / 2;
+    sideways.position.set(
+      plan.verticalBar.x + sideways.height / 2,
+      (plan.verticalBar.y0 + plan.verticalBar.y1) / 2 + sideways.width / 2,
+    );
+    into.addChild(sideways);
   }
   bars.stroke({ width: plan.barWidth, color: theme.inkMuted, alpha: plan.barAlpha });
   into.addChildAt(bars, 0);

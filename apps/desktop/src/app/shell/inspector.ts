@@ -9,7 +9,7 @@
  * kept when they are not.
  */
 
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 
 import {
   presetForRule,
@@ -28,7 +28,7 @@ import {
 
 import { DeskActions } from '../state/desk-actions';
 import { DeskStore } from '../state/desk-store';
-import { EventActions } from '../state/event-actions';
+import { EventActions, normaliseTimeLabel } from '../state/event-actions';
 import { EventStore } from '../state/event-store';
 import { SelectionStore } from '../state/selection-store';
 
@@ -114,11 +114,11 @@ const FRAME_VALUES: Readonly<Record<string, ImagePayload['frame']>> = {
               <db-toggle
                 label=""
                 ariaLabel="All day"
-                [checked]="!eventTime()"
+                [checked]="!showTime()"
                 (checkedChange)="setAllDay($event)"
               />
             </db-inspector-row>
-            @if (eventTime()) {
+            @if (showTime()) {
               <db-inspector-row label="Time">
                 <!-- The placeholder holds the format, which is what a
                      placeholder is for. The all-day state is reported by the
@@ -130,10 +130,19 @@ const FRAME_VALUES: Readonly<Record<string, ImagePayload['frame']>> = {
                   class="db-input db-numeral"
                   placeholder="e.g. 14:00"
                   style="flex:1;min-width:0"
+                  [attr.data-invalid]="timeRejected() || null"
                   [value]="eventTime()"
                   (change)="retimeEvent($any($event.target))"
                 />
               </db-inspector-row>
+              @if (timeRejected()) {
+                <!-- A refused entry that simply vanished from the box read as
+                     the panel eating the edit, which is the thing this panel
+                     exists not to do. -->
+                <div class="db-help" data-invalid="true" style="padding:0 12px 4px">
+                  Enter a time like 14:00, or turn on All day.
+                </div>
+              }
             }
             <db-inspector-row label="Color">
               <db-color-picker [value]="eventColor()" (valueChange)="recolorEvent($event)" />
@@ -334,10 +343,14 @@ export class Inspector {
     if (event) this.eventActions.setTitle(event.id, title);
   }
 
+  /** `true` when the last thing typed into the Time field was not a time. */
+  protected readonly timeRejected = signal(false);
+
   /** Commits a time edit; emptying the field makes the event all-day again. */
   protected retimeEvent(field: HTMLInputElement): void {
     const event = this.selectedEvent();
     if (!event) return;
+    this.timeRejected.set(normaliseTimeLabel(field.value) === null);
     this.eventActions.setTime(event.id, field.value);
     // Redraw from the store for the same reason the number field does: an
     // entry that was refused, or one that was accepted in a different shape
@@ -423,13 +436,49 @@ export class Inspector {
     if (id) this.actions.setStickyHand(id, hand);
   }
 
+  /**
+   * The time an event had before it was switched to all-day.
+   *
+   * Without it, switching to all-day and back discards the time the user
+   * typed. Inventing a replacement is no better — it writes a start nobody
+   * asked for and reports it as the event's own.
+   */
+  private readonly stashedTime = signal('');
+  /** Shows an empty Time field for an event that has never had one. */
+  private readonly timeRevealed = signal(false);
+
+  /** Whether the Time row is on screen; also the inverse of the All day switch. */
+  protected readonly showTime = computed(() => !!this.eventTime() || this.timeRevealed());
+
+  /**
+   * Both stashes belong to one event, so a new selection starts clean.
+   *
+   * Keyed on the id through its own computed rather than read off the event:
+   * depending on the record itself would reset the stash every time the event
+   * changed — including the very write that stashed the time in the first place.
+   */
+  private readonly selectedEventId = computed(() => this.selectedEvent()?.id ?? null);
+  private readonly resetStash = effect(() => {
+    this.selectedEventId();
+    this.stashedTime.set('');
+    this.timeRevealed.set(false);
+  });
+
   /** Clearing the time is what makes an event all-day; this says so out loud. */
   protected setAllDay(allDay: boolean): void {
     const event = this.selectedEvent();
     if (!event) return;
-    // Turning the switch off has to put something in the field, or the event
-    // would still be all-day and the switch would spring back on.
-    this.eventActions.setTime(event.id, allDay ? '' : '09:00');
+    if (allDay) {
+      this.stashedTime.set(this.eventTime());
+      this.timeRevealed.set(false);
+      this.eventActions.setTime(event.id, '');
+      return;
+    }
+    // Put back what the event had rather than a made-up hour; with nothing to
+    // put back, show the empty field and let the user say.
+    const stashed = this.stashedTime();
+    if (stashed) this.eventActions.setTime(event.id, stashed);
+    else this.timeRevealed.set(true);
   }
 
   /** Name of the selected file chip, as imported. */

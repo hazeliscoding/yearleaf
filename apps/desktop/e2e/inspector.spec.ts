@@ -206,10 +206,10 @@ test('a sticky can be pinned and unhandwritten, because it really can be', async
   await page.getByLabel('Handwritten', { exact: true }).uncheck();
   await expect.poll(async () => (await payload()).hand).toBe(false);
 
-  // The undo shortcut is deliberately ignored while a form control has focus,
-  // so that Ctrl+Z inside a field means "undo my typing" — which means the
-  // undo has to come from outside the panel.
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  // Straight after clicking the switch, with it still focused. A switch holds
+  // no text, so the guard that keeps Ctrl+Z out of a field being typed in must
+  // not apply — it left undo unreachable until the user clicked elsewhere,
+  // which reads as undo being broken.
   await page.keyboard.press('Control+z');
   await expect.poll(async () => (await payload()).hand).toBe(true);
 });
@@ -295,6 +295,35 @@ test('giving an event a time keeps it, and clearing it makes it all-day again', 
   expect(cleared.variant).toBe('allday');
 });
 
+test('switching to all-day and back keeps the time that was there', async ({ page }) => {
+  await openWorkspace(page);
+  await expect.poll(() => page.evaluate(() => window.__e2e.events().length)).toBeGreaterThan(0);
+  const timed = (await events(page)).find((e) => e.timeLabel)!;
+  await page.evaluate((id) => window.__e2e.selectEvent(id), timed.id);
+
+  const allDay = page.getByLabel('All day', { exact: true });
+  await allDay.check();
+  await allDay.uncheck();
+
+  // Inventing a replacement hour would report a start nobody asked for as the
+  // event's own, in a panel whose whole point is that it does not do that.
+  expect((await events(page)).find((e) => e.id === timed.id)!.timeLabel).toBe(timed.timeLabel);
+});
+
+test('an event that never had a time gets an empty field, not an invented hour', async ({
+  page,
+}) => {
+  await openWorkspace(page);
+  await expect.poll(() => page.evaluate(() => window.__e2e.events().length)).toBeGreaterThan(0);
+  const allDayEvent = (await events(page)).find((e) => !e.timeLabel)!;
+  await page.evaluate((id) => window.__e2e.selectEvent(id), allDayEvent.id);
+
+  await page.getByLabel('All day', { exact: true }).uncheck();
+
+  await expect(page.getByLabel('Event time')).toHaveValue('');
+  expect((await events(page)).find((e) => e.id === allDayEvent.id)!.timeLabel).toBeFalsy();
+});
+
 test('a time that is not a time never reaches the calendar', async ({ page }) => {
   await openWorkspace(page);
   await expect.poll(() => page.evaluate(() => window.__e2e.events().length)).toBeGreaterThan(0);
@@ -309,4 +338,6 @@ test('a time that is not a time never reaches the calendar', async ({ page }) =>
   // pushed the event's own name off the day cell.
   expect((await events(page)).find((e) => e.id === target.id)!.timeLabel).toBe(target.timeLabel);
   await expect(time).toHaveValue(target.timeLabel!);
+  // And it says why, rather than the entry simply vanishing from the box.
+  await expect(page.locator('app-inspector').getByText('Enter a time like 14:00')).toBeVisible();
 });

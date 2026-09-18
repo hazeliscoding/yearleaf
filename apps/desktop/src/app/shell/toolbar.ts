@@ -35,6 +35,7 @@ import { ViewportStore, type Tier } from '../state/viewport-store';
       (jump)="openPalette.emit()"
     />
     <db-segmented
+      ariaLabel="Zoom level"
       [options]="tiers"
       [value]="viewport.tier()"
       (valueChange)="viewport.fitTier($any($event))"

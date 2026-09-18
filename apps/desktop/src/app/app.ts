@@ -245,10 +245,16 @@ export class App {
   protected onKeyDown(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
     const tag = (target.tagName || '').toLowerCase();
+    // A switch or a checkbox is an <input> with no text in it, so treating it
+    // as a text field costs the shortcut everything and protects nothing: the
+    // inspector's toggles left Ctrl+Z unreachable until the user happened to
+    // click elsewhere, which reads as undo being broken.
+    const inputType = tag === 'input' ? (target as HTMLInputElement).type : '';
+    const textual = tag === 'input' && inputType !== 'checkbox' && inputType !== 'radio';
     // `tools.editing()` covers the frame between an editor appearing and
     // receiving focus, where the event target is still the document body.
     const typing =
-      tag === 'input' || tag === 'textarea' || target.isContentEditable || this.tools.editing();
+      textual || tag === 'textarea' || target.isContentEditable || this.tools.editing();
 
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault();

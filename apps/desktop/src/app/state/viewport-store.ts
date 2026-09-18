@@ -27,6 +27,7 @@ import {
   screenToWorld,
   tierForZoom,
   yearRect,
+  ZOOM_TIERS,
   zoomAroundPoint,
   type Point,
   type ViewportState,
@@ -341,9 +342,18 @@ export class ViewportStore {
     return { ...rect, width: rect.width + MONTH_FIT_MARGIN };
   }
 
-  /** Fits a specific month (plus its desk margin) into the viewport. */
+  /**
+   * Fits a specific month (plus its desk margin) into the viewport.
+   *
+   * Never below the month tier, even when the month will not quite fit. On a
+   * window narrower than about 1100px the honest fit landed at 0.33, which is
+   * the *year* tier — so pressing Month put the reader in Year, the tier chip
+   * said so, and every mark that the month tier draws, the gutter seams
+   * included, silently went away on the smaller window.
+   */
   fitMonthOf(year: number, monthIndex: number): void {
-    this.fitRect(this.monthFitRect(year, monthIndex));
+    const rect = this.monthFitRect(year, monthIndex);
+    this.centerRectAt(rect, Math.max(fitZoom(rect, this.viewSize()), ZOOM_TIERS.month));
   }
 
   /** Centers a date's cell on screen, zooming in to at least week level. */

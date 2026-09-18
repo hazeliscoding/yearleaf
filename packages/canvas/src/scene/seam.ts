@@ -33,13 +33,21 @@
 
 import { Container, Graphics, Text } from 'pixi.js';
 
-import { MONTH_H, MONTH_HEADER_H, MONTH_W, monthFromOrdinal, monthOrdinal } from '../month-layout';
+import {
+  MONTH_GAP,
+  MONTH_H,
+  MONTH_HEADER_H,
+  MONTH_W,
+  YEAR_GAP,
+  monthFromOrdinal,
+  monthOrdinal,
+} from '../month-layout';
 import type { ZoomTier } from '../viewport';
 import { MONTH_NAMES } from './month-names';
 import type { ThemeTokens } from './theme';
 
 /** Ink a seam element asks for; resolved against the theme when drawn. */
-export type SeamTone = 'muted' | 'accent' | 'secondary';
+export type SeamTone = 'seam' | 'accent' | 'secondary';
 
 /** One typeset line on a seam, positioned in sheet-local coordinates. */
 export interface SeamText {
@@ -76,9 +84,15 @@ export interface SeamPlan {
 const COLS = 3;
 /** Inset at each end of a month seam, leaving the crossroads open. */
 const SEAM_INSET = 24;
-/** Gutter below a sheet within a year block, and below the last row. */
-const MONTH_GUTTER = 100;
-const YEAR_GUTTER = 240;
+/**
+ * Gutter below a sheet within a year block, and below the last row.
+ *
+ * Taken from the layout rather than restated. Private copies agreed by
+ * coincidence, and a test computing its own floor from the same private copy
+ * would have passed while every bar landed on the next sheet's paper.
+ */
+const MONTH_GUTTER = MONTH_GAP;
+const YEAR_GUTTER = YEAR_GAP;
 /** Where the one legend sits along a seam. */
 const LEGEND_X = MONTH_W / 2 + 24;
 /** Shorter than this a surviving run is a speck, not a rule. */
@@ -138,7 +152,7 @@ export function planSeam(year: number, monthIndex: number, tier: ZoomTier): Seam
       gap,
       bars: [mid - 60, mid, mid + 60].map((y) => ({ y, runs: [[0, yearSliceWidth(col)] as const] })),
       barWidth: 12,
-      barAlpha: 0.7,
+      barAlpha: 0.85,
       texts: [],
       catchword: null,
       verticalBar: null,
@@ -157,7 +171,7 @@ export function planSeam(year: number, monthIndex: number, tier: ZoomTier): Seam
   // Once per seam, not twice. The same words repeated along one strip read as
   // texture rather than as a message, and the message is the point.
   const legendY = kind === 'year' ? mid - 18 : mid;
-  texts.push({ x: LEGEND_X, y: legendY, text: '3 MONTHS', size: 34, weight: '500', tone: 'muted' });
+  texts.push({ x: LEGEND_X, y: legendY, text: '3 MONTHS', size: 34, weight: '500', tone: 'seam' });
   if (kind === 'year') {
     // The year beyond this boundary, which is the block's year plus one in
     // every column. Taking the successor *month's* year instead was right only
@@ -191,7 +205,7 @@ export function planSeam(year: number, monthIndex: number, tier: ZoomTier): Seam
     // Runs are cut once the type is measured, which only the drawer can do.
     bars: barYs.map((y) => ({ y, runs: [[x0, x1] as const] })),
     barWidth: 5,
-    barAlpha: kind === 'year' ? 0.7 : 0.55,
+    barAlpha: kind === 'year' ? 0.85 : 0.7,
     texts,
     catchword,
     // Sideways really is one month, so the side gutter carries one bar. Drawing
@@ -224,8 +238,7 @@ const CATCHWORD_INSET = 28;
 /** Resolves a tone to the theme's ink. */
 function inkFor(tone: SeamTone, theme: ThemeTokens): number {
   if (tone === 'accent') return theme.accent;
-  if (tone === 'secondary') return theme.inkSecondary;
-  return theme.inkMuted;
+  return theme.inkSecondary;
 }
 
 /**
@@ -282,8 +295,12 @@ export function drawSeam(
     const label = new Text({
       text,
       style: {
-        fontFamily: theme.fontUI,
-        fontSize: 40,
+        // Set in the calendar face at the legend's size: it was the loudest
+        // thing on the seam and the only sans word of that size on the desk,
+        // so it read as interface pasted on, and it outshouted the
+        // relationship while naming the one month that is never on screen here.
+        fontFamily: theme.fontCalendar,
+        fontSize: 34,
         fontWeight: '600',
         fill: theme.inkSecondary,
       },
@@ -343,7 +360,7 @@ export function drawSeam(
         fontSize: 30,
         fontWeight: '500',
         letterSpacing: 2.4,
-        fill: theme.inkMuted,
+        fill: theme.inkSecondary,
       },
     });
     sideways.rotation = -Math.PI / 2;
@@ -353,6 +370,6 @@ export function drawSeam(
     );
     into.addChild(sideways);
   }
-  bars.stroke({ width: plan.barWidth, color: theme.inkMuted, alpha: plan.barAlpha });
+  bars.stroke({ width: plan.barWidth, color: theme.inkSecondary, alpha: plan.barAlpha });
   into.addChildAt(bars, 0);
 }

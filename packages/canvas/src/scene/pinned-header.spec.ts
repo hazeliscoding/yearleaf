@@ -37,6 +37,20 @@ describe('monthNeedingItsName', () => {
     );
   });
 
+  it('names the month when the title is off the left, band still showing', () => {
+    // A sheet prints its title at the far left of its header band, so panning
+    // right across the sheet leaves the band on screen and empty. Testing the
+    // band rather than the title suppressed the rail here — a screen and a
+    // half of scrolling with no month named anywhere on it.
+    const september = monthOrigin(2026, 8);
+    const state = viewingFrom(september.x + 900, september.y - 40);
+
+    // The band really is on screen in this frame; only the title is not.
+    expect(state.panY + (september.y + MONTH_HEADER_H) * state.zoom).toBeGreaterThan(0);
+
+    expect(monthNeedingItsName(state)).toEqual({ year: 2026, monthIndex: 8 });
+  });
+
   it('names the unlabelled sheet, not the one filling the screen', () => {
     // This is the exact frame that misled a professional calendar reader:
     // September's last rows along the top, December's sheet — header and all —
@@ -70,6 +84,49 @@ describe('monthNeedingItsName', () => {
     const september = monthOrigin(2026, 8);
     expect(
       monthNeedingItsName(viewingFrom(september.x + MONTH_W + 4000, september.y + 900)),
+    ).toBeNull();
+  });
+
+  it('ignores the neighbour peeking over the gutter, at any window shape', () => {
+    // The default framing leaves a few pixels of the month above showing. It
+    // qualified once on a tall narrow window, where the threshold was a share
+    // of the viewport and the same sliver counted for more.
+    const september = monthOrigin(2026, 8);
+    for (const [width, height] of [
+      [1400, 900],
+      [520, 700],
+      [760, 1400],
+    ] as const) {
+      const zoom = 0.455;
+      const top = september.y - 150;
+      expect(
+        monthNeedingItsName({
+          visible: { x: september.x - 60, y: top, width: width / zoom, height: height / zoom },
+          panX: -(september.x - 60) * zoom,
+          panY: -top * zoom,
+          zoom,
+          viewWidth: width,
+        }),
+        `a sliver should not claim the band at ${width}x${height}`,
+      ).toBeNull();
+    }
+  });
+
+  it('says nothing when a sheet is too small on screen to be read into', () => {
+    // Panned a little at a whole-year framing the top edge sits inside some
+    // sheet, but at that size nobody is reading it — they are looking at the
+    // year, and every sheet is captioned anyway.
+    const april = monthOrigin(2026, 3);
+    const zoom = 0.12;
+    const top = april.y + 400;
+    expect(
+      monthNeedingItsName({
+        visible: { x: april.x, y: top, width: 1400 / zoom, height: 900 / zoom },
+        panX: -april.x * zoom,
+        panY: -top * zoom,
+        zoom,
+        viewWidth: 1400,
+      }),
     ).toBeNull();
   });
 

@@ -57,8 +57,17 @@ const ZOOM_STEP = 1.25;
 const MONTH_NAMED_COVERAGE = 0.2;
 /** Coverage at which the view sits wholly inside one month — no header in sight. */
 const MONTH_FILLS_VIEW = 0.99;
-/** Length of a glide between two framings. */
-const GLIDE_MS = 420;
+/**
+ * Length of a glide, from the distance it covers.
+ *
+ * A fixed duration makes a long flight fast and a short one slow. A step that
+ * wraps a row travels about three times as far as one within a row, so at a
+ * constant 420ms the wrap — the move that most needs reading — went past three
+ * times quicker than the move that needed it least.
+ */
+function glideMs(screenDistance: number): number {
+  return Math.min(900, Math.max(260, 260 + screenDistance * 0.26));
+}
 /** Screen distance below which a glide is not worth the frames. */
 const SHORT_HOP = 24;
 
@@ -381,17 +390,17 @@ export class ViewportStore {
   private glideTo(target: ViewportState): void {
     this.stopFlight();
     const from = this.state();
-    const far =
-      Math.abs(target.panX - from.panX) + Math.abs(target.panY - from.panY) > SHORT_HOP ||
-      Math.abs(Math.log(target.zoom / from.zoom)) > 0.05;
+    const travel = Math.hypot(target.panX - from.panX, target.panY - from.panY);
+    const far = travel > SHORT_HOP || Math.abs(Math.log(target.zoom / from.zoom)) > 0.05;
     if (this.instant || !far || prefersReducedMotion()) {
       this.state.set(target);
       return;
     }
 
+    const duration = glideMs(travel);
     const started = performance.now();
     const tick = (now: number) => {
-      const t = Math.min(1, (now - started) / GLIDE_MS);
+      const t = Math.min(1, (now - started) / duration);
       // Ease out cubic: leaves quickly, settles gently.
       const k = 1 - Math.pow(1 - t, 3);
       this.state.set({

@@ -12,4 +12,5 @@ export * from './spatial-index';
 export * from './sticky-layout';
 export * from './scene/scene-types';
 export { IMAGE_CAPTION_HEIGHT } from './scene/object-view';
+export { PINNED_HEADER_H } from './scene/pinned-header';
 export * from './scene/scene-controller';

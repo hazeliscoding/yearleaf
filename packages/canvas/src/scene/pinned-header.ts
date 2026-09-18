@@ -38,11 +38,15 @@ const MONTH_NAMES = [
 const WEEKDAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 /** Height of the band in screen pixels; fixed, so it reads at any zoom. */
-export const PINNED_HEADER_H = 34;
+export const PINNED_HEADER_H = 38;
 /** Below this the day columns are too narrow to letter legibly. */
 const MIN_COLUMN_PX = 34;
-/** Share of the view a sheet must show before its name is worth pinning. */
-const MIN_SHARE_TO_NAME = 0.15;
+/** How far below the top edge a sheet must reach before its name is pinned. */
+const MIN_DEPTH_PX = 80;
+/** Below this a sheet is too small on screen for anyone to be reading into it. */
+const MIN_SHEET_PX = 320;
+/** How near the top a sheet's own header must be for the band to speak for it. */
+const BAND_TAKEOVER_PX = 120;
 
 /** What the band needs to know; all screen-space except the world rect. */
 export interface PinnedHeaderState {
@@ -53,8 +57,23 @@ export interface PinnedHeaderState {
   readonly viewWidth: number;
 }
 
+/** Where a sheet draws its own title, relative to the sheet's origin. */
+const TITLE_INSET_X = 28;
+const TITLE_TOP = 26;
+const TITLE_BOTTOM = 110;
+
+/** Whether a sheet's own printed title is fully on screen. */
+function titleOnScreen(origin: { x: number; y: number }, state: PinnedHeaderState): boolean {
+  const { visible } = state;
+  return (
+    origin.x + TITLE_INSET_X >= visible.x &&
+    origin.y + TITLE_TOP >= visible.y &&
+    origin.y + TITLE_BOTTOM <= visible.y + visible.height
+  );
+}
+
 /**
- * The month being read into whose own title has scrolled off the top.
+ * The month being read into whose own title has scrolled out of sight.
  *
  * Not simply the month filling most of the screen: drifting down from
  * September puts September's last rows along the top and December's sheet,
@@ -68,6 +87,9 @@ export function monthNeedingItsName(
   state: PinnedHeaderState,
 ): { year: number; monthIndex: number } | null {
   const { visible } = state;
+  // A sheet too small on screen to read is not one anybody is reading into.
+  if (MONTH_W * state.zoom < MIN_SHEET_PX) return null;
+
   const firstYearRow = Math.floor(visible.y / YEAR_STRIDE_Y);
   const lastYearRow = Math.min(
     Math.floor((visible.y + visible.height) / YEAR_STRIDE_Y),
@@ -75,26 +97,45 @@ export function monthNeedingItsName(
   );
 
   let best: { year: number; monthIndex: number } | null = null;
-  let bestArea = 0;
+  let bestOverlap = 0;
   for (let row = firstYearRow; row <= lastYearRow; row++) {
     const year = EPOCH_YEAR + row;
     for (let monthIndex = 0; monthIndex < 12; monthIndex++) {
       const origin = monthOrigin(year, monthIndex);
-      // Its title is on screen, so it is already saying its own name.
-      if (state.panY + (origin.y + MONTH_HEADER_H) * state.zoom > 0) continue;
+      // Two ways a sheet needs its name said. Either the top edge has been
+      // scrolled into its grid — the section a sticky header labels — or its
+      // own header band is on screen but showing blank, which is what a reader
+      // panned rightwards across a sheet is looking at. Comparing areas instead
+      // went wrong in both directions: it named a month covering most of a tall
+      // narrow window when the sheet in hand was labelled, and refused to name
+      // anything at a close zoom, where a fraction of one sheet fills the
+      // screen and the name is needed most.
+      const scrolledInto =
+        visible.y >= origin.y &&
+        visible.y < origin.y + MONTH_H &&
+        // Reaching barely below the top edge is the gutter's neighbour peeking
+        // over, not a sheet being read.
+        (origin.y + MONTH_H - visible.y) * state.zoom >= MIN_DEPTH_PX;
+      // Near the top, specifically. The band sits at the top of the screen, so
+      // it may only stand in for a header that is also at the top — a sheet
+      // whose title is clipped at the *bottom* of the view is not one this can
+      // speak for, and naming it put December's name over September's paper.
+      const bandShowing =
+        origin.y + MONTH_HEADER_H > visible.y &&
+        (origin.y - visible.y) * state.zoom <= BAND_TAKEOVER_PX;
+      if (!scrolledInto && !bandShowing) continue;
+      // Its own title is on screen, so it is already saying its name. Testing
+      // the header *band* instead was wrong in a way that mattered: the title
+      // sits at the band's far left, so panning right across a sheet left the
+      // band on screen, blank, with the rail suppressed behind it — a screen
+      // and a half of scrolling with no month named anywhere.
+      if (titleOnScreen(origin, state)) continue;
 
       const overlapW =
         Math.min(visible.x + visible.width, origin.x + MONTH_W) - Math.max(visible.x, origin.x);
-      const overlapH =
-        Math.min(visible.y + visible.height, origin.y + MONTH_H) - Math.max(visible.y, origin.y);
-      if (overlapW <= 0 || overlapH <= 0) continue;
-      const area = overlapW * overlapH;
-      // A sliver is not a sheet you are reading. The default framing leaves a
-      // few pixels of the month above peeking over the gutter, and naming that
-      // would put a header on screen for a month nobody is looking at.
-      if (area < visible.width * visible.height * MIN_SHARE_TO_NAME) continue;
-      if (area > bestArea) {
-        bestArea = area;
+      if (overlapW <= 0) continue;
+      if (overlapW > bestOverlap) {
+        bestOverlap = overlapW;
         best = { year, monthIndex };
       }
     }
@@ -126,32 +167,36 @@ export function drawPinnedHeader(
   if (right - left < 120) return null;
 
   const background = new Graphics();
-  background
-    .rect(left, 0, right - left, PINNED_HEADER_H)
-    .fill({ color: theme.surfacePaper, alpha: 0.97 });
+  background.rect(left, 0, right - left, PINNED_HEADER_H).fill(theme.surfacePaper);
   background
     .moveTo(left, PINNED_HEADER_H)
     .lineTo(right, PINNED_HEADER_H)
     .stroke({ width: 1, color: theme.border });
   into.addChild(background);
 
+  // Two rows, the way the sheet's own header stacks them. Setting the title
+  // beside the letters instead put it in Monday's seat and left six columns
+  // named and one not — which is the very shape that had a reader concluding
+  // the columns were printed wrong.
   const title = new Text({
     text: `${MONTH_NAMES[focus.monthIndex]} ${focus.year}`,
     style: {
       fontFamily: theme.fontCalendar,
-      fontSize: 15,
+      fontSize: 13,
       fontWeight: '600',
       fill: theme.inkPrimary,
     },
   });
-  title.position.set(left + 14, (PINNED_HEADER_H - title.height) / 2);
+  title.position.set(left + 14, 3);
   into.addChild(title);
 
   // The letters sit over the columns they name, which is the half of this that
-  // answers "are these columns in the wrong place".
+  // answers "are these columns in the wrong place" — but not when the sheet's
+  // own weekday row is still on screen just below, where a second set is only
+  // the same words twice.
+  const ownLettersShowing = origin.y + MONTH_HEADER_H - 32 > state.visible.y;
   const columnWidth = CELL_W * state.zoom;
-  if (columnWidth >= MIN_COLUMN_PX) {
-    const titleEnds = title.x + title.width + 16;
+  if (columnWidth >= MIN_COLUMN_PX && !ownLettersShowing) {
     for (let col = 0; col < MONTH_COLS; col++) {
       const columnLeft = state.panX + (origin.x + col * CELL_W) * state.zoom;
       if (columnLeft + columnWidth < 0 || columnLeft > state.viewWidth) continue;
@@ -159,22 +204,20 @@ export function drawPinnedHeader(
         text: WEEKDAYS[col],
         style: {
           fontFamily: theme.fontUI,
-          fontSize: 10.5,
-          fontWeight: '500',
+          fontSize: 10,
+          // The sheet marks the weekend by dropping to the disabled ink, which
+          // measures about 2:1 — fine at world scale on a printed sheet, not on
+          // a fixed 10px surface. Weight carries the distinction here instead,
+          // so all seven stay readable.
+          fontWeight: col > 4 ? '400' : '600',
           letterSpacing: 1.1,
-          fill: col > 4 ? theme.inkDisabled : theme.inkMuted,
+          fill: theme.inkSecondary,
         },
       });
-      // Measured, not guessed from the column edge: at a close zoom a column
-      // is wide enough that its letter clears the title even though the column
-      // itself starts behind it, and Monday is exactly the letter a reader
-      // doubting the columns wants to see.
-      const letterX = Math.round(columnLeft + (columnWidth - label.width) / 2);
-      if (letterX < titleEnds) {
-        label.destroy();
-        continue;
-      }
-      label.position.set(letterX, Math.round((PINNED_HEADER_H - label.height) / 2));
+      label.position.set(
+        Math.round(columnLeft + (columnWidth - label.width) / 2),
+        PINNED_HEADER_H - 15,
+      );
       into.addChild(label);
     }
   }

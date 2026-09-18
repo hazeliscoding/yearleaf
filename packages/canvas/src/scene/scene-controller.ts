@@ -351,6 +351,7 @@ export class CalendarSceneController {
       this.objectViews.set(id, rebuilt);
     }
     this.redrawGrid();
+    this.redrawPinnedHeader();
     this.drawInteraction();
     this.markDirty();
   }
@@ -511,7 +512,6 @@ export class CalendarSceneController {
     this.monthEntries.delete(key);
   }
 
-  /** Screen-space paper grid, offset by pan so it scrolls with the world. */
   /** Rebuilds the pinned month band for the current framing. */
   private redrawPinnedHeader(): void {
     const { panX, panY, zoom } = this.viewport;
@@ -536,6 +536,7 @@ export class CalendarSceneController {
     );
   }
 
+  /** Screen-space paper grid, offset by pan so it scrolls with the world. */
   private redrawGrid(): void {
     const g = this.gridLayer;
     g.clear();

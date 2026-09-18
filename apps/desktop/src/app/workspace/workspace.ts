@@ -25,6 +25,7 @@ import {
   CalendarSceneController,
   cellRectForDate,
   checklistItemAt,
+  PINNED_HEADER_H,
   screenToWorld,
   type DayContent,
   type Point,
@@ -419,8 +420,22 @@ export class Workspace {
   }
 
   /** Starts a pan, drag, or resize depending on what is under the pointer. */
+  /**
+   * Whether a pointer event landed on the pinned month band.
+   *
+   * The band paints over the top of the desk, so a click there must not reach
+   * the day cell behind it — an opaque strip that passes clicks through is the
+   * worst of both, and a double-click on the month's own name was opening a
+   * text editor on a day the reader could not even see.
+   */
+  private underPinnedHeader(event: MouseEvent): boolean {
+    if (!this.scene.pinnedMonth) return false;
+    return event.clientY - this.host.getBoundingClientRect().top < PINNED_HEADER_H;
+  }
+
   protected onPointerDown(event: PointerEvent): void {
     if (event.button !== 0) return;
+    if (this.underPinnedHeader(event)) return;
     const world = this.toWorld(event);
     const panAnywhere = this.tools.spaceHeld() || this.tools.active() === 'Pan';
     if (!panAnywhere && this.createForActiveTool(world)) return;
@@ -474,6 +489,7 @@ export class Workspace {
   /** Double-click edits editable objects or writes on empty paper. */
   protected onDoubleClick(event: MouseEvent): void {
     if (!this.sceneReady()) return;
+    if (this.underPinnedHeader(event)) return;
     const world = this.toWorld(event);
     const hit = this.scene.hitTest(world);
 

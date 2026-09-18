@@ -19,6 +19,7 @@ declare global {
       dateAtCenter(): { day: number; month: number; year: number } | null;
       flying(): boolean;
       pinnedMonth(): { year: number; monthIndex: number } | null;
+      floats(): readonly { id: string }[];
     };
   }
 }
@@ -354,5 +355,38 @@ test('the band stays out of a whole-year view, where every sheet is titled', asy
   await landed(page);
 
   expect(await pinned(page)).toBeNull();
+});
+
+test('the band keeps a sheet named when the title is off to the left', async ({ page }) => {
+  await openWorkspace(page);
+  const box = (await page.locator('[data-screen-label="Canvas"]').boundingBox())!;
+
+  // Pan right across September. Its header band stays on screen but its title
+  // lives at the band's far left, so the band went blank with the rail
+  // suppressed behind it — a screen and a half of scrolling, nothing named.
+  await page.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2);
+  await page.keyboard.down('Space');
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.7 - 420, box.y + box.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await page.keyboard.up('Space');
+
+  expect(await pinned(page)).toEqual({ year: 2026, monthIndex: 8 });
+});
+
+test('a click on the band does not reach the day cell behind it', async ({ page }) => {
+  await openWorkspace(page);
+  await dragUp(page, 420);
+  expect(await pinned(page)).not.toBeNull();
+
+  const before = (await page.evaluate(() => window.__e2e.floats())).length;
+  const box = (await page.locator('[data-screen-label="Canvas"]').boundingBox())!;
+  await page.mouse.dblclick(box.x + 200, box.y + 12);
+
+  // An opaque strip that passes clicks through is the worst of both: a
+  // double-click on the month's own name opened a text editor on a day the
+  // reader could not even see.
+  await expect(page.getByLabel('Edit text')).toHaveCount(0);
+  expect((await page.evaluate(() => window.__e2e.floats())).length).toBe(before);
 });
 

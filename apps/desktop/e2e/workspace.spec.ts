@@ -202,19 +202,23 @@ test('a day cell draws nothing the desk does not actually hold', async ({ page }
   await openWorkspace(page);
   const dayContent = (iso: string) => page.evaluate((d) => window.__e2e.dayContent(d), iso);
 
-  // The 3rd carried a handwritten "call Mom" and the 5th a taped photo, both
-  // invented by the sample month. Nothing creates them, nothing edits them and
-  // nothing can delete them, so on a real desk they were somebody else's
-  // handwriting appearing in September and staying there.
-  expect(await dayContent('2026-09-03T00:00:00')).toBeNull();
-  expect(await dayContent('2026-09-05T00:00:00')).toBeNull();
-
-  // The 15th has a real, stored event. It used to arrive with a sample task
-  // merged alongside it, which is the same ghost wearing a real day's clothes.
+  // The 15th has a real, stored event, and it is read first on purpose: the
+  // seeded month lands asynchronously, and every "draws nothing" assertion
+  // below would pass for the wrong reason against a desk that has not
+  // hydrated yet. Waiting for content to appear is what makes its absence
+  // elsewhere mean something.
+  await expect.poll(() => dayContent('2026-09-15T00:00:00')).not.toBeNull();
   const fifteenth = (await dayContent('2026-09-15T00:00:00'))!;
   expect(fifteenth.events?.length).toBeGreaterThan(0);
   expect(fifteenth.tasks).toBeUndefined();
   expect(fifteenth.hand).toBeUndefined();
   expect(fifteenth.img).toBeUndefined();
   expect(fifteenth.range).toBeUndefined();
+
+  // The 3rd carried a handwritten "call Mom" and the 5th a taped photo, both
+  // invented by the sample month. Nothing creates them, nothing edits them and
+  // nothing can delete them, so on a real desk they were somebody else's
+  // handwriting appearing in September and staying there.
+  expect(await dayContent('2026-09-03T00:00:00')).toBeNull();
+  expect(await dayContent('2026-09-05T00:00:00')).toBeNull();
 });

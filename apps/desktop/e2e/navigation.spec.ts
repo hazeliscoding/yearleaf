@@ -390,3 +390,23 @@ test('a click on the band does not reach the day cell behind it', async ({ page 
   expect((await page.evaluate(() => window.__e2e.floats())).length).toBe(before);
 });
 
+
+test('a palette jump lands on the day its row names', async ({ page }) => {
+  await openWorkspace(page);
+  await page.keyboard.press('Control+k');
+  const row = page.getByText('Jump to Zine deadline');
+  await expect(row).toBeVisible();
+  await row.click();
+  await landed(page);
+
+  // `sample-desk.spec.ts` checks that the row's label names something the desk
+  // actually holds. This is the other half, and neither implies the other: the
+  // label lives in the palette constant and the destination lives in a switch
+  // in `App.runPaletteItem`, so leaving the handler on the day the row used to
+  // name — or dropping its case entirely — passes over there and fails here.
+  expect(await page.evaluate(() => window.__e2e.dateAtCenter())).toEqual({
+    day: 11,
+    month: 8,
+    year: 2026,
+  });
+});

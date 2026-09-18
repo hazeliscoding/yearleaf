@@ -747,9 +747,18 @@ export class Workspace {
     this.transientRect = null;
     this.pan = null;
     if (this.tools.panning()) this.tools.panning.set(false);
-    // Only if this gesture actually held one back. Pointer-up is a document
-    // listener, so most of the presses arriving here never touched the canvas.
-    if (this.revealPending) this.revealSelection();
+    // Only if this gesture actually held one back: pointer-up is a document
+    // listener, so most presses arriving here never touched the canvas. The
+    // request is consumed here rather than inside the retry, because the retry
+    // can decline — a glide started mid-gesture leaves `revealSelection`
+    // returning early, and a request that survives that is owed to whatever
+    // clicks next, which was a 2183px jump from pressing the theme toggle.
+    // Declining a correction and forgetting it are the same thing; only
+    // performing it is different.
+    if (this.revealPending) {
+      this.revealPending = false;
+      this.revealSelection();
+    }
   }
 
   /**

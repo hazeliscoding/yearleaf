@@ -40,6 +40,7 @@ declare global {
       select(id: string): boolean;
       viewport(): { panX: number; panY: number; zoom: number };
       panTo(x: number, y: number): void;
+      flying(): boolean;
       toScreen(x: number, y: number): { x: number; y: number };
     };
   }
@@ -266,8 +267,24 @@ test('pressing an object the panel will cover does not drag it sideways', async 
 test('a click on the chrome does not yank the desk back to the selection', async ({ page }) => {
   await openWorkspace(page);
   const target = (await floats(page))[0];
+  const wide = await canvasWidth(page);
   await page.evaluate((id) => window.__e2e.select(id), target.id);
   await expect(inspectorShowing(page)).toBeVisible();
+  await expect.poll(() => canvasWidth(page)).toBeLessThan(wide);
+
+  // Let the selection's own reveal finish before panning away. Waiting only
+  // for the panel leaves a legitimate late correction free to land after the
+  // viewport is captured and be read as the regression this is looking for.
+  await expect
+    .poll(async () =>
+      (
+        await page.evaluate(
+          ([x, y]) => window.__e2e.toScreen(x, y),
+          [target.x + target.width, target.y],
+        )
+      ).x,
+    )
+    .toBeLessThanOrEqual(await canvasWidth(page));
 
   // Scroll the selection well off-screen, keeping it selected.
   const v = await page.evaluate(() => window.__e2e.viewport());
@@ -280,6 +297,40 @@ test('a click on the chrome does not yank the desk back to the selection', async
   // into a jump back to whatever happens to be selected.
   await page.locator('button[title="Toggle theme"]').click();
 
+  expect(await page.evaluate(() => window.__e2e.viewport())).toEqual(before);
+});
+
+test('a reveal a glide declined is not left owed to the next click', async ({ page }) => {
+  await openWorkspace(page);
+  const target = (await floats(page))[0];
+  const box = (await canvas(page).boundingBox())!;
+  const wide = await canvasWidth(page);
+
+  // Park it in the strip and press it, so a reveal is deferred by the gesture.
+  const v = await page.evaluate(() => window.__e2e.viewport());
+  await page.evaluate(
+    ([px, py]) => window.__e2e.panTo(px, py),
+    [wide - 120 - target.x * v.zoom, v.panY],
+  );
+  const at = await page.evaluate(
+    ([x, y]) => window.__e2e.toScreen(x, y),
+    [target.x + target.width / 2, target.y + target.height / 2],
+  );
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await page.mouse.down();
+  await expect.poll(() => canvasWidth(page)).toBeLessThan(wide);
+
+  // Navigate while still holding, and let go into the glide. The retry
+  // declines, because a flight is somewhere the reader actually asked to go.
+  await page.keyboard.press('PageDown');
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => window.__e2e.flying())).toBe(false);
+  const before = await page.evaluate(() => window.__e2e.viewport());
+
+  // Declining a correction and forgetting it have to be the same thing. A
+  // request that survives its own gesture is owed to whatever presses next,
+  // which is every bit as arbitrary as the jump this whole guard prevents.
+  await page.locator('button[title="Toggle theme"]').click();
   expect(await page.evaluate(() => window.__e2e.viewport())).toEqual(before);
 });
 

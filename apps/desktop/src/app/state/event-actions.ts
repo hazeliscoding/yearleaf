@@ -86,6 +86,27 @@ export class EventActions {
    * and the command above has already inserted the row synchronously. A plain
    * event yields exactly one occurrence, on the day it was created for.
    */
+  /**
+   * The occurrence the desk would draw today for a held one's date and event.
+   *
+   * `null` when nothing stands there any more, which leaves the caller to
+   * decide what a snapshot of something gone should mean. An override is
+   * matched through its `seriesId`, since materialising one replaces the
+   * series' own row on that date with a row of its own.
+   */
+  private liveOccurrence(stale: Occurrence): Occurrence | null {
+    const day = stale.date;
+    return (
+      [...this.events.occurrencesByDate({ from: day, to: day }).values()]
+        .flat()
+        .find(
+          (occurrence) =>
+            occurrence.event.id === stale.event.id ||
+            occurrence.event.seriesId === stale.event.id,
+        ) ?? null
+    );
+  }
+
   private occurrenceFor(event: EventRecord): Occurrence | null {
     const day = event.occurrenceDate ?? event.date;
     return (
@@ -221,8 +242,18 @@ export class EventActions {
    *
    * Cancelling one date is the only scope this handles: editing an occurrence
    * still needs the "this / this and following / all" choice.
+   *
+   * The occurrence handed in is re-resolved first, because the caller's is a
+   * snapshot taken when the selection was made and the event may have changed
+   * shape since. Giving a freshly created event a rule through the inspector
+   * does exactly that: every occurrence of a recurring event is computed, so
+   * the live one is `virtual`, while the held one still describes the one-off
+   * it was created as. Trusting it deleted the whole series where clicking any
+   * chip of that same series suppressed a single date — the same key meaning
+   * two different things depending on how the event came to be selected.
    */
-  removeOccurrence(occurrence: Occurrence): void {
+  removeOccurrence(stale: Occurrence): void {
+    const occurrence = this.liveOccurrence(stale) ?? stale;
     if (!occurrence.virtual) {
       this.remove(occurrence.event.id);
       return;

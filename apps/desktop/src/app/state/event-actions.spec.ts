@@ -179,3 +179,50 @@ describe('EventActions.create', () => {
     expect(occurrence.virtual).toBe(false);
   });
 });
+
+describe('EventActions.removeOccurrence with a stale selection', () => {
+  let store: EventStore;
+  let actions: EventActions;
+  let selection: SelectionStore;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: DESK_PERSISTENCE, useValue: new InMemoryDeskPersistence() }],
+    });
+    store = TestBed.inject(EventStore);
+    actions = TestBed.inject(EventActions);
+    selection = TestBed.inject(SelectionStore);
+  });
+
+  it('cancels one date of a series the inspector has just created', () => {
+    const date = new Date(2026, 8, 18);
+    const id = actions.create(date, 'Seminar');
+    // The occurrence the selection is holding was resolved before the rule
+    // existed, so it still describes a plain one-off event.
+    const held = selection.occurrence()!;
+    expect(held.virtual).toBe(false);
+
+    actions.setRepeat(id, 'weekly');
+    actions.removeOccurrence(held);
+
+    // Deleting must mean the same thing however the event came to be
+    // selected. Trusting the stale snapshot read `virtual: false` and took
+    // the whole series with it, where clicking any chip of that same series
+    // suppresses the one date.
+    expect(store.get(id), 'the series must survive cancelling one of its dates').toBeTruthy();
+    expect(store.get(id)!.rrule).toBeTruthy();
+    const tombstone = store
+      .events()
+      .find((event) => event.seriesId === id && event.deleted);
+    expect(tombstone, 'the cancelled date is suppressed by a tombstone').toBeTruthy();
+    expect(tombstone!.occurrenceDate?.getDate()).toBe(18);
+  });
+
+  it('still deletes a plain event outright, which has no series to spare', () => {
+    const id = actions.create(new Date(2026, 8, 18), 'Dentist');
+
+    actions.removeOccurrence(selection.occurrence()!);
+
+    expect(store.get(id)).toBeUndefined();
+  });
+});

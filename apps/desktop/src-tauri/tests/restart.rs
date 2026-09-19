@@ -180,10 +180,11 @@ fn tidy(dirs: &[&Path]) {
 /// Runs a copy of this binary in the given role and waits for it to finish.
 ///
 /// No timeout: `output()` waits for as long as the child takes, so a child that
-/// hangs hangs the suite rather than failing it. Adding one means spawning the
-/// wait on a thread and killing by process id when it expires, which is
-/// platform-specific in the part that matters — recorded in the roadmap rather
-/// than written speculatively for a hang that has not happened.
+/// hangs hangs the suite rather than failing it. Deferred because these are run
+/// by hand today and a hang is visible when you are watching for it, not
+/// because it is hard — `Child::try_wait` and `kill` are portable, and the only
+/// real work is draining the child's output while polling so a full pipe cannot
+/// deadlock the thing being timed. Recorded in the roadmap.
 fn spawn(role: &str, dir: &Path) -> std::process::Output {
   Command::new(std::env::current_exe().expect("test binary"))
     .args(["restart_child", "--exact", "--nocapture", "--test-threads=1"])
@@ -221,16 +222,16 @@ fn an_object_survives_a_process_that_never_shut_down() {
     writer.status
   );
 
-  // The commit is in the write-ahead log and has not been folded into the
-  // database file, which is what makes the read below a replay rather than an
-  // ordinary open. Asserting it is the difference between exercising that path
-  // and assuming it.
+  // A log survived the crash. That is all this says: SQLite may checkpoint
+  // during a commit, so a non-empty log does not establish that nothing was
+  // folded into the database file. Where the commit actually lives is settled
+  // by the orphan comparison below, which measures it.
   let wal = dir.join("desk.db-wal");
   let wal_len = std::fs::metadata(&wal).map(|meta| meta.len()).unwrap_or(0);
   assert!(
     wal_len > 0,
-    "expected a hot write-ahead log at {}; without one the object had already \
-     been checkpointed and replay was never tested",
+    "expected a write-ahead log at {} after the crash; without one there is \
+     nothing for the reopen to recover from",
     wal.display()
   );
 

@@ -528,6 +528,14 @@ export class Inspector {
   protected setRepeat(choice: string): void {
     const event = this.selectedEvent();
     if (!event || choice === 'Custom') return;
+    // The Ends transient belongs to the rule it was describing, and this is
+    // the rule being replaced or torn down. Resetting only on selection
+    // change let a refusal survive Repeats→Never→Weekly and remount already
+    // flagging a rule the user had said nothing about — the same class of
+    // leak as the refusal marker outliving its selection, one seam over.
+    this.pendingEndMode.set(null);
+    this.endDateRejected.set(false);
+    this.endCountRejected.set(false);
     this.eventActions.setRepeat(
       event.id,
       choice === 'Never' ? null : (choice.toLowerCase() as RepeatPreset),

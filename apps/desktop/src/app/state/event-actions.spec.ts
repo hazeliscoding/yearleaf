@@ -413,6 +413,28 @@ describe('EventActions repeat ends', () => {
     expect(store.get(doomed)!.title).toBe('Field trip');
   });
 
+  it('a frequency change that shrinks the horizon prunes past it too', () => {
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    actions.setRepeat(id, 'monthly');
+    actions.setRepeatEnd(id, { count: 4 });
+    // Monthly x4 reaches Dec 1; weekly x4 will end on Sep 22.
+    const december = actions.materialise(on(id, new Date(2026, 11, 1))[0]);
+    actions.setTitle(december, 'Wrap-up');
+
+    actions.setRepeat(id, 'weekly');
+
+    // The end rides across the frequency change, so the horizon moved from
+    // December to September — and the December chip claiming to belong to
+    // the series must move out with it, exactly as setRepeatEnd prunes.
+    expect(store.get(id)!.rrule).toBe('FREQ=WEEKLY;BYDAY=TU;COUNT=4');
+    expect(store.get(december)).toBeUndefined();
+    expect(on(id, new Date(2026, 11, 1))).toEqual([]);
+
+    history.undo();
+    expect(store.get(id)!.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=1;COUNT=4');
+    expect(store.get(december)!.title).toBe('Wrap-up');
+  });
+
   it('shortening drops cancelled dates beyond the end as well', () => {
     const id = actions.create(new Date(2026, 8, 1), 'Seminar');
     actions.setRepeat(id, 'weekly');

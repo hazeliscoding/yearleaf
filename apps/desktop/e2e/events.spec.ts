@@ -548,3 +548,32 @@ test('an end before the event itself is refused out loud', async ({ page }) => {
   );
   await expect(until).toHaveValue('');
 });
+
+test('a refusal dies with the rule it refused', async ({ page }) => {
+  await openWorkspace(page);
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Seminar');
+  await page.keyboard.press('Enter');
+
+  // Refuse an end, then tear the rule down and build a new one.
+  await page.getByLabel('Repeats').selectOption('Weekly');
+  await page.getByLabel('Ends').selectOption('On date');
+  const until = page.getByLabel('Repeat until');
+  await until.fill('2026-01-01');
+  await until.blur();
+  await expect(page.getByText('on or after', { exact: false })).toBeVisible();
+
+  await page.getByLabel('Repeats').selectOption('Never');
+  await expect(page.getByLabel('Ends')).toBeHidden();
+  await page.getByLabel('Repeats').selectOption('Weekly');
+
+  // A brand-new rule the user has said nothing about must not remount
+  // already refusing: the marker belongs to the entry that was refused, and
+  // that entry died with the old rule.
+  await expect(page.getByLabel('Ends')).toHaveValue('Never');
+  await expect(page.getByText('on or after', { exact: false })).toBeHidden();
+});

@@ -228,13 +228,22 @@ export class EventActions {
     // dropping the end here would quietly unbound it.
     const end = event.rrule ? this.endOf(event.rrule) : null;
     const rrule = preset ? withRuleEnd(ruleForPreset(preset, event.date), end) : undefined;
-    this.history.execute(
+    // Carrying a count across a frequency change can also *shrink* the
+    // horizon — monthly×4 reaches December, weekly×4 ends in September — so
+    // the same sweep that guards setRepeatEnd runs here, or the chip past the
+    // end this file promises cannot exist would exist by this route instead.
+    const doomed = rrule ? this.beyondTheEnd(id, rrule, event.date) : [];
+    const steps: Command[] = [
       new UpdateEventCommand(
         this.events,
         id,
         { rrule },
-        rrule ? 'Repeat event' : 'Stop repeating',
+        withPruneCount(rrule ? 'Repeat event' : 'Stop repeating', doomed.length),
       ),
+      ...doomed,
+    ];
+    this.history.execute(
+      steps.length === 1 ? steps[0] : new CompositeCommand(steps, steps[0].label),
     );
   }
 
@@ -245,6 +254,30 @@ export class EventActions {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Delete-steps for every series row past a rule's final date.
+   *
+   * Empty for a rule that runs forever. For a count the expansion window's
+   * far edge never binds — the walk returns the moment the count is reached.
+   */
+  private beyondTheEnd(id: string, rrule: string, anchor: Date): Command[] {
+    const end = this.endOf(rrule);
+    if (!end) return [];
+    const last = expandRecurrence(parseRecurrenceRule(rrule), anchor, {
+      from: anchor,
+      to: 'until' in end ? end.until : new Date(9999, 0, 1),
+    }).at(-1);
+    const lastKey = last ? dateKey(last) : dateKey(anchor);
+    const steps: Command[] = [];
+    for (const row of this.events.events()) {
+      if (row.seriesId !== id || !row.occurrenceDate) continue;
+      if (dateKey(row.occurrenceDate) > lastKey) {
+        steps.push(new DeleteEventCommand(this.events, row.id));
+      }
+    }
+    return steps;
   }
 
   /**
@@ -275,25 +308,15 @@ export class EventActions {
     }
     if (rrule === event.rrule) return;
 
-    const label = end ? 'End repeat' : 'Repeat forever';
-    const steps: Command[] = [new UpdateEventCommand(this.events, id, { rrule }, label)];
-
-    if (end) {
-      // The new final date. For a count the window's far edge never binds —
-      // expansion returns the moment the count is reached.
-      const last = expandRecurrence(parseRecurrenceRule(rrule), event.date, {
-        from: event.date,
-        to: 'until' in end ? end.until : new Date(9999, 0, 1),
-      }).at(-1);
-      const lastKey = last ? dateKey(last) : dateKey(event.date);
-      for (const row of this.events.events()) {
-        if (row.seriesId !== id || !row.occurrenceDate) continue;
-        if (dateKey(row.occurrenceDate) > lastKey) {
-          steps.push(new DeleteEventCommand(this.events, row.id));
-        }
-      }
-    }
-
+    // The history label carries the cost: "End repeat" over a step that also
+    // removed two edited dates says less than it knows, and the moment that
+    // matters is discovery an hour later, when undo has become expensive.
+    const doomed = this.beyondTheEnd(id, rrule, event.date);
+    const label = withPruneCount(end ? 'End repeat' : 'Repeat forever', doomed.length);
+    const steps: Command[] = [
+      new UpdateEventCommand(this.events, id, { rrule }, label),
+      ...doomed,
+    ];
     this.history.execute(steps.length === 1 ? steps[0] : new CompositeCommand(steps, label));
   }
 
@@ -368,4 +391,10 @@ export class EventActions {
     this.history.execute(new AddEventCommand(this.events, tombstone));
     if (this.selection.selection()?.kind === 'event') this.selection.clear();
   }
+}
+
+/** Suffixes a history label with the changed dates a shortening removed. */
+function withPruneCount(label: string, removed: number): string {
+  if (removed === 0) return label;
+  return `${label} — removed ${removed} changed date${removed === 1 ? '' : 's'}`;
 }

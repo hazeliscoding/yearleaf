@@ -155,6 +155,18 @@ The data model should separate spatial placement from type-specific content. A s
 - `object_tag`
 - `setting`
 
+> **Delivery note (decided 2026-09-17, recorded here 2026-09-19).** These
+> entities are the model's vocabulary, not a schema anyone owes up front:
+> schema v1 grows **one migration per feature**, so each table is designed
+> beside the flow that uses it (`apps/desktop/src-tauri/src/db.rs` is the
+> authority on what exists). Shipped so far: `desk` and `calendar_object`
+> (migration 1), `event` and `recurrence_rule` (migration 2, plus the `placed`
+> flag in migration 3), and `attachment` (migration 4). `drawing` lands with
+> handwriting, `tag`/`object_tag` with tagging, `setting` with preferences.
+> `calendar` has been needed by nothing so far — no flow separates calendars
+> within a desk — and should be treated as an open design question rather
+> than a table with an owner.
+
 ### Calendar object fields
 
 ```text

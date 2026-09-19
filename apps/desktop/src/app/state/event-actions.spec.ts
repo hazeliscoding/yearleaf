@@ -256,9 +256,19 @@ describe('EventActions.removeOccurrence on a materialised override', () => {
     // Give the 8th its own row, the way double-clicking a chip does.
     const eighth = on(8)[0];
     expect(eighth.virtual).toBe(true);
-    actions.materialise(eighth);
+    const overrideId = actions.materialise(eighth);
+    // Give it words of its own, so restoring it is distinguishable from the
+    // series simply computing the date again.
+    actions.setTitle(overrideId, 'Guest speaker');
     const override = on(8)[0];
     expect(override.virtual).toBe(false);
+    expect(override.event.title).toBe('Guest speaker');
+
+    // Selected the way pressing Delete requires it to be, so the assertion
+    // below about clearing is about something rather than about nothing.
+    const selection = TestBed.inject(SelectionStore);
+    selection.select('event', override.id);
+    selection.occurrence.set(override);
 
     actions.removeOccurrence(override);
 
@@ -267,6 +277,17 @@ describe('EventActions.removeOccurrence on a materialised override', () => {
     expect(on(8), 'the cancelled date must stay empty').toEqual([]);
     expect(store.get('seminar'), 'and the series must survive it').toBeTruthy();
     expect(on(15).length, 'along with its other dates').toBe(1);
+
+    // The chip is gone, so nothing may still be selected and editable: that
+    // row now exists only to say the date is empty.
+    expect(selection.selection()).toBeNull();
+
+    // Suppressing by marking the override rather than deleting it is what
+    // lets undo hand back the edited occurrence and not merely the series'
+    // own computed one.
+    TestBed.inject(HistoryStore).undo();
+    expect(on(8).length, 'undo restores the date').toBe(1);
+    expect(on(8)[0].event.title, 'with the words that were on it').toBe('Guest speaker');
   });
 
   it('does not delete a series when the date it was holding is already gone', () => {

@@ -73,20 +73,6 @@ export class EventActions {
   }
 
   /**
-   * The occurrence describing a stored event on its own date.
-   *
-   * Selecting an event without one used to be possible only here, and the
-   * inspector edits exclusively through the occurrence — so the panel drew
-   * every control against its fallbacks and wrote through none of them.
-   *
-   * Resolved by asking the store to expand rather than by assembling one, so
-   * this event is described the same way the chips on the calendar are. There
-   * is no ordering problem to work around: `occurrencesByDate` is a pure query
-   * over stored events, not the viewport-scoped cache the renderer memoises,
-   * and the command above has already inserted the row synchronously. A plain
-   * event yields exactly one occurrence, on the day it was created for.
-   */
-  /**
    * The occurrence the desk would draw today for a held one's date and event.
    *
    * `null` when nothing stands there any more, which leaves the caller to
@@ -107,6 +93,20 @@ export class EventActions {
     );
   }
 
+  /**
+   * The occurrence describing a stored event on its own date.
+   *
+   * Selecting an event without one used to be possible only in {@link create},
+   * and the inspector edits exclusively through the occurrence — so the panel
+   * drew every control against its fallbacks and wrote through none of them.
+   *
+   * Resolved by asking the store to expand rather than by assembling one, so
+   * the event is described the same way the chips on the calendar are. There
+   * is no ordering problem to work around: `occurrencesByDate` is a pure query
+   * over stored events, not the viewport-scoped cache the renderer memoises,
+   * and the command has already inserted the row synchronously. A plain event
+   * yields exactly one occurrence, on the day it was created for.
+   */
   private occurrenceFor(event: EventRecord): Occurrence | null {
     const day = event.occurrenceDate ?? event.date;
     return (
@@ -270,6 +270,10 @@ export class EventActions {
       this.history.execute(
         new UpdateEventCommand(this.events, event.id, { deleted: true }, 'Cancel occurrence'),
       );
+      // Like the other two routes out of here: the chip is gone, so leaving it
+      // selected leaves the inspector editing a row that now exists only to
+      // say the date is empty.
+      if (this.selection.selection()?.kind === 'event') this.selection.clear();
       return;
     }
 

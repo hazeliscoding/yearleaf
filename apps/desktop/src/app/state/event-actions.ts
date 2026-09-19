@@ -236,9 +236,13 @@ export class EventActions {
   /**
    * Removes one occurrence.
    *
-   * A stored occurrence is deleted outright. A computed one has no row to
+   * Three shapes, one meaning — that date is cancelled. A plain event is its
+   * own occurrence and is deleted outright. A computed one has no row to
    * delete, so it is suppressed by materialising a tombstone for that date —
-   * RFC 5545's EXDATE, and undoable because it is just another added row.
+   * RFC 5545's EXDATE, and undoable because it is just another added row. A
+   * materialised override already *is* the row for its date, so its own row is
+   * marked deleted, which suppresses the date and keeps the words the user put
+   * on it for undo to hand back.
    *
    * Cancelling one date is the only scope this handles: editing an occurrence
    * still needs the "this / this and following / all" choice.

@@ -226,3 +226,67 @@ describe('EventActions.removeOccurrence with a stale selection', () => {
     expect(store.get(id)).toBeUndefined();
   });
 });
+
+describe('EventActions.removeOccurrence on a materialised override', () => {
+  let store: EventStore;
+  let actions: EventActions;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: DESK_PERSISTENCE, useValue: new InMemoryDeskPersistence() }],
+    });
+    store = TestBed.inject(EventStore);
+    actions = TestBed.inject(EventActions);
+  });
+
+  /**
+   * The seminar's own occurrences on a day. Scoped to the series on purpose:
+   * the store seeds the sample month asynchronously, so an unfiltered query
+   * here answers with whatever the seed happened to have landed by then.
+   */
+  const on = (day: number) => {
+    const date = new Date(2026, 8, day);
+    return [...store.occurrencesByDate({ from: date, to: date }).values()]
+      .flat()
+      .filter((o) => o.event.id === 'seminar' || o.event.seriesId === 'seminar');
+  };
+
+  it('suppresses the date rather than handing it back to the series', () => {
+    store.insert(seminar({ rrule: 'FREQ=WEEKLY;BYDAY=TU' }));
+    // Give the 8th its own row, the way double-clicking a chip does.
+    const eighth = on(8)[0];
+    expect(eighth.virtual).toBe(true);
+    actions.materialise(eighth);
+    const override = on(8)[0];
+    expect(override.virtual).toBe(false);
+
+    actions.removeOccurrence(override);
+
+    // Deleting the row alone left the rule free to compute the date straight
+    // back, so cancelling an occurrence the user had edited cancelled nothing.
+    expect(on(8), 'the cancelled date must stay empty').toEqual([]);
+    expect(store.get('seminar'), 'and the series must survive it').toBeTruthy();
+    expect(on(15).length, 'along with its other dates').toBe(1);
+  });
+
+  it('does not delete a series when the date it was holding is already gone', () => {
+    const selection = TestBed.inject(SelectionStore);
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    // The snapshot taken at creation, which still calls itself a one-off.
+    const held = selection.occurrence()!;
+    actions.setRepeat(id, 'weekly');
+
+    actions.removeOccurrence(held);
+    // The same stale occurrence, pressed a second time. Nothing stands on the
+    // 1st now, and "nothing is here" must not authorise deleting the series
+    // the snapshot happened to belong to.
+    actions.removeOccurrence(held);
+
+    expect(store.get(id), 'the series must survive a second press').toBeTruthy();
+    const laterDate = new Date(2026, 8, 8);
+    const later = [...store.occurrencesByDate({ from: laterDate, to: laterDate }).values()]
+      .flat()
+      .filter((o) => o.event.id === id || o.event.seriesId === id);
+    expect(later.length, 'and keep computing its other dates').toBe(1);
+  });
+});

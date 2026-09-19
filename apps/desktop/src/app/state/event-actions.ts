@@ -253,7 +253,26 @@ export class EventActions {
    * two different things depending on how the event came to be selected.
    */
   removeOccurrence(stale: Occurrence): void {
-    const occurrence = this.liveOccurrence(stale) ?? stale;
+    // Nothing stands on that date any more — already cancelled, or undone away
+    // beneath the selection. That is not permission to delete the series it
+    // used to belong to, which is what falling back to the snapshot bought:
+    // the second press read `virtual: false` off a description of an event
+    // that had since become a rule, and took the whole thing.
+    const occurrence = this.liveOccurrence(stale);
+    if (!occurrence) return;
+
+    // A materialised occurrence already *is* the row for its date, so
+    // cancelling it means marking that row suppressed rather than deleting it.
+    // Removing it outright left the rule free to compute the date straight
+    // back, so cancelling an occurrence the user had edited cancelled nothing.
+    const { event } = occurrence;
+    if (event.seriesId && event.occurrenceDate) {
+      this.history.execute(
+        new UpdateEventCommand(this.events, event.id, { deleted: true }, 'Cancel occurrence'),
+      );
+      return;
+    }
+
     if (!occurrence.virtual) {
       this.remove(occurrence.event.id);
       return;

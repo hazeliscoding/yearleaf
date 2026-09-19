@@ -146,7 +146,10 @@ test('clicking a checkbox toggles the item and undo restores it', async ({ page 
   expect((await itemsAfter())[index].done ?? false).toBe(wasDone);
 });
 
-test('checklist stickies edit line-per-line and keep done state by position', async ({ page }) => {
+test('checklist stickies edit line-per-line and ticks stay on their items', async ({ page }) => {
+  // This test used to be named "…keep done state by position", which was the
+  // corrupting rule stated as a promise. It only ever passed because it
+  // appends — the one edit where position and identity agree.
   await openWorkspace(page);
   const sticky = (await floats(page)).find((f) => f.payload.items?.length);
   const labels = sticky!.payload.items!.map((i) => i.label);
@@ -168,6 +171,65 @@ test('checklist stickies edit line-per-line and keep done state by position', as
   const items = (await floats(page)).find((f) => f.id === sticky!.id)!.payload.items!;
   expect(items.map((i) => i.label)).toEqual([...labels, 'buy stamps']);
   expect(items.map((i) => !!i.done)).toEqual([...doneBefore, false]);
+});
+
+test('retyping a checklist in a new order does not move the ticks', async ({ page }) => {
+  // Marcus, 2026-09-18: six items, ticks on rows 1 and 3, retyped in a new
+  // order — and the ticks stayed on rows 1 and 3, so the list came back
+  // claiming he had defended his prospectus. Through the real editor, since
+  // that is where he did it: the blob split, the trim, and the reconciliation
+  // all sit between the textarea and the store.
+  await openWorkspace(page);
+  const sticky = (await floats(page)).find((f) => f.payload.items?.length);
+  const labels = sticky!.payload.items!.map((i) => i.label);
+  const doneBefore = sticky!.payload.items!.map((i) => !!i.done);
+  expect(doneBefore.some(Boolean), 'the seeded checklist must carry a tick').toBe(true);
+
+  await centerOn(page, sticky!.x + sticky!.width / 2, sticky!.y + sticky!.height / 2);
+  const center = await screenPoint(
+    page,
+    sticky!.x + sticky!.width / 2,
+    sticky!.y + sticky!.height / 2,
+  );
+  await page.mouse.dblclick(center.x, center.y);
+  const editor = page.getByLabel('Edit text');
+  await expect(editor).toHaveValue(labels.join('\n'));
+
+  const reversed = [...labels].reverse();
+  await editor.fill(reversed.join('\n'));
+  await page.keyboard.press('Escape');
+
+  const items = (await floats(page)).find((f) => f.id === sticky!.id)!.payload.items!;
+  expect(items.map((i) => i.label)).toEqual(reversed);
+  expect(items.map((i) => !!i.done)).toEqual([...doneBefore].reverse());
+});
+
+test('a checklist made with the Task tool re-edits by double-click', async ({ page }) => {
+  // The test the 2026-09-19 triage recorded as owed: the claim rested on an
+  // uncommitted probe, while the committed suite edited only the seeded
+  // checklist. This is the created one, end to end.
+  await openWorkspace(page);
+  const box = (await page.locator('[data-screen-label="Canvas"]').boundingBox())!;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+
+  await page.keyboard.press('k');
+  await page.mouse.click(cx, cy);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByLabel('Edit text')).toBeHidden();
+  const created = (await floats(page)).at(-1)!;
+  expect(created.payload.items?.length).toBeGreaterThan(0);
+
+  await page.mouse.dblclick(cx, cy);
+  const editor = page.getByLabel('Edit text');
+  await expect(editor).toBeVisible();
+  await expect(editor).toBeFocused();
+  await editor.fill('first errand\nsecond errand');
+  await page.keyboard.press('Escape');
+
+  const items = (await floats(page)).find((f) => f.id === created.id)!.payload.items!;
+  expect(items.map((i) => i.label)).toEqual(['first errand', 'second errand']);
 });
 
 test('Enter opens a new line where lines are the content', async ({ page }) => {

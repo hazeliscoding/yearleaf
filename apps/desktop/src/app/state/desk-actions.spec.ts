@@ -155,13 +155,58 @@ describe('DeskActions checklist editing', () => {
     expect(items().map((i) => !!i.done)).toEqual([false, true, false]);
   });
 
-  it('replaces labels while keeping done state by position', () => {
-    actions.setChecklistItems('list', ['uno', 'dos', 'tres', 'cuatro']);
-    expect(items().map((i) => i.label)).toEqual(['uno', 'dos', 'tres', 'cuatro']);
-    expect(items().map((i) => !!i.done)).toEqual([false, true, false, false]);
+  it('keeps a tick on its item when the lines are reordered', () => {
+    // Marcus's corruption, 2026-09-18: ticks lived on row numbers, so
+    // retyping the same items in a new order reassigned them — "my checklist
+    // now claims I've defended my prospectus". A tick belongs to its words.
+    actions.setChecklistItems('list', ['three', 'one', 'two']);
+    expect(items().map((i) => i.label)).toEqual(['three', 'one', 'two']);
+    expect(items().map((i) => !!i.done)).toEqual([false, false, true]);
+  });
 
+  it('keeps ticks with their items when a line is inserted above them', () => {
+    // The same corruption by another gesture: an insertion shifted every
+    // row below it, so the tick stayed at its index and changed owners.
+    actions.setChecklistItems('list', ['zero', 'one', 'two', 'three']);
+    expect(items().map((i) => !!i.done)).toEqual([false, false, true, false]);
+  });
+
+  it('appending keeps every existing state, as it always did', () => {
+    actions.setChecklistItems('list', ['one', 'two', 'three', 'four']);
+    expect(items().map((i) => !!i.done)).toEqual([false, true, false, false]);
+  });
+
+  it('a deleted line takes its tick with it', () => {
+    actions.setChecklistItems('list', ['one', 'three']);
+    expect(items().map((i) => i.label)).toEqual(['one', 'three']);
+    // "two" was done and is gone; nothing else may inherit that.
+    expect(items().map((i) => !!i.done)).toEqual([false, false]);
+  });
+
+  it('rewording a done item unticks it, which is the chosen trade-off', () => {
+    // A tick travels only with its exact words. The alternative — falling
+    // back to the row when the words changed — can hand a tick to a new line
+    // typed above a done one, which is the false positive this whole rule
+    // exists to prevent. Unticked-after-reword is visible and one click to
+    // repair; falsely ticked is silent and lies.
+    actions.setChecklistItems('list', ['one', 'two, with notes', 'three']);
+    expect(items().map((i) => !!i.done)).toEqual([false, false, false]);
+  });
+
+  it('duplicate lines match in order, so an unchanged list is unchanged', () => {
+    actions.setChecklistItems('list', ['same', 'same']);
+    actions.toggleChecklistItem('list', 0);
+    expect(items().map((i) => !!i.done)).toEqual([true, false]);
+
+    actions.setChecklistItems('list', ['same', 'same']);
+    expect(items().map((i) => !!i.done)).toEqual([true, false]);
+  });
+
+  it('a full replacement is one undoable step back to the old list', () => {
+    actions.setChecklistItems('list', ['three', 'one', 'two']);
     history.undo();
     expect(items().map((i) => i.label)).toEqual(['one', 'two', 'three']);
+    expect(items().map((i) => !!i.done)).toEqual([false, true, false]);
   });
 });
 

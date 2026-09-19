@@ -15,6 +15,7 @@ import {
   ResizeObjectCommand,
   RotateObjectCommand,
   UpdatePayloadCommand,
+  type ChecklistItem,
   type DeskObject,
   type ImagePayload,
   type StationeryColor,
@@ -246,14 +247,34 @@ export class DeskActions {
   }
 
   /**
-   * Replaces a checklist sticky's items from edited lines; done state is
-   * preserved by position, added lines start unchecked.
+   * Replaces a checklist sticky's items from edited lines.
+   *
+   * A tick travels with its words, never with its row number. Done state used
+   * to be copied across by position, so retyping the same items in a new
+   * order reassigned every tick — a checklist came back claiming the wrong
+   * things were finished, and undo recorded the corruption as an edit. Each
+   * new line now claims the first not-yet-claimed old item with exactly the
+   * same label; duplicates therefore match in order, which keeps an unchanged
+   * list unchanged.
+   *
+   * Two consequences are deliberate. A deleted line takes its tick with it —
+   * nothing may inherit a state whose words are gone. And rewording a done
+   * item unticks it, because the fallback that would preserve it (match by
+   * row when the words changed) is the same rule that hands a tick to a new
+   * line typed above a done one. Unticked-after-reword is visible and one
+   * click to repair; falsely ticked is silent and lies.
    */
   setChecklistItems(id: string, labels: readonly string[]): void {
     const object = this.desk.get(id);
     if (!object || object.payload.kind !== 'sticky' || !object.payload.items) return;
-    const previous = object.payload.items;
-    const items = labels.map((label, i) => ({ label, done: previous[i]?.done ?? false }));
+    const donors: (ChecklistItem | undefined)[] = [...object.payload.items];
+    const items = labels.map((label) => {
+      const at = donors.findIndex((donor) => donor?.label === label);
+      if (at === -1) return { label, done: false };
+      const donor = donors[at]!;
+      donors[at] = undefined;
+      return { label, done: donor.done ?? false };
+    });
     this.history.execute(
       new UpdatePayloadCommand(this.desk, id, object.payload, { ...object.payload, items }),
     );

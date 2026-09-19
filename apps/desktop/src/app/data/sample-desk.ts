@@ -194,13 +194,25 @@ export const SEARCH_INDEX: readonly SearchEntry[] = [
   { label: 'Deploy website', meta: 'Mon Sep 28 · 09:00', dot: 'var(--stationery-teal)', day: 28, kw: 'deploy website launch' },
 ];
 
+/** `Sep 19, 2026` — the spelling the palette's date metas already use. */
+function paletteDate(date: Date): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
 /** Command palette content. */
 export const PALETTE_GROUPS: readonly DbPaletteGroup[] = [
   {
     label: 'Go to',
     items: [
       { icon: 'calendar', label: 'Next Friday', meta: 'Sep 18, 2026', selected: true },
-      { icon: 'calendar', label: 'Today', meta: 'Sep 15, 2026', shortcut: ['⇧', 'T'] },
+      // The row's click already goes to the real today; only this label was
+      // frozen at the day the sample was written, which is how the palette
+      // came to call the 15th "Today" three days later. "Next Friday" above
+      // stays frozen deliberately: its *destination* is hardcoded too, and a
+      // real date over a stale jump would lie worse than a stale date over a
+      // stale jump (tracked with the palette item in the roadmap).
+      { icon: 'calendar', label: 'Today', meta: paletteDate(new Date()), shortcut: ['⇧', 'T'] },
       { icon: 'calendar', label: 'October 2026' },
     ],
   },

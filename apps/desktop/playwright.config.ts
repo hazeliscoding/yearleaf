@@ -17,7 +17,14 @@ export default defineConfig({
   webServer: {
     command: 'pnpm exec ng serve --port 4300',
     url: 'http://localhost:4300',
-    reuseExistingServer: !process.env['CI'],
+    // Never reuse. A server left behind by an earlier run keeps serving the
+    // bundle it started with, and `ng serve` rebuilds on its own schedule — so
+    // a reused one answers with code that is not in the working tree and the
+    // suite passes for a tree nobody has. That cost a false pass and three
+    // killed servers in one afternoon. Refusing to reuse turns it into a
+    // loud "port already in use" instead, and costs nothing in the ordinary
+    // case, where there is no server to reuse.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

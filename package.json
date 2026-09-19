@@ -7,8 +7,11 @@
   "scripts": {
     "dev": "pnpm --filter desktop start",
     "build": "pnpm --filter desktop build",
-    "test": "pnpm run test:packages && pnpm --filter desktop test",
-    "test:packages": "vitest run --config vitest.packages.config.ts"
+    "test": "pnpm run test:packages && pnpm --filter desktop test && pnpm run test:rust",
+    "test:all": "pnpm run test && pnpm run test:e2e",
+    "test:packages": "vitest run --config vitest.packages.config.ts",
+    "test:rust": "cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "test:e2e": "pnpm --filter desktop e2e"
   },
   "devDependencies": {
     "typescript": "~6.0.2",

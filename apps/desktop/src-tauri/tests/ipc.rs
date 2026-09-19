@@ -51,6 +51,21 @@ fn main_webview(app: &tauri::App<MockRuntime>) -> WebviewWindow<MockRuntime> {
     .expect("main webview")
 }
 
+/// The URL Tauri serves the application from, which is not the same everywhere.
+///
+/// Windows and Android get a `http://tauri.localhost` shim; every other target
+/// gets the real `tauri://localhost` (`Manager::tauri_protocol_url`). The
+/// capability matches on `URL: local`, so hardcoding either one passes on the
+/// platform it was written on and is refused by the ACL on the rest. This file
+/// had the Windows spelling, which is why it had only ever been run there.
+fn protocol_url() -> tauri::Url {
+  if cfg!(windows) || cfg!(target_os = "android") {
+    "http://tauri.localhost".parse().expect("windows protocol url")
+  } else {
+    "tauri://localhost".parse().expect("protocol url")
+  }
+}
+
 fn send_import(
   webview: &WebviewWindow<MockRuntime>,
   body: InvokeBody,
@@ -66,7 +81,7 @@ fn send_import(
       cmd: "import_attachment".into(),
       callback: CallbackFn(0),
       error: CallbackFn(1),
-      url: "http://tauri.localhost".parse().unwrap(),
+      url: protocol_url(),
       body,
       headers: map,
       invoke_key: INVOKE_KEY.to_string(),

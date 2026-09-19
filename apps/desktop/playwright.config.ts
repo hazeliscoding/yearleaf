@@ -8,6 +8,16 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
+  // A committed `test.only` runs one test and reports success for the suite,
+  // which is the precise shape of a green badge over something that cannot
+  // fail. Locally it stays allowed, because focusing a test is how you work on
+  // one.
+  forbidOnly: !!process.env['CI'],
+  // The console reporter leaves nothing on disk, so the workflow's
+  // upload-on-failure step had nothing to upload. A failure in CI is the one
+  // time nobody can rerun it locally with the same state, so it writes the
+  // report as well as printing it.
+  reporter: process.env['CI'] ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://localhost:4300',
     viewport: { width: 1400, height: 900 },

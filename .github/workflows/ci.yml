@@ -53,7 +53,7 @@ jobs:
       # only "Process from config.webServer was not able to start".
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.x >=24.15.0
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile

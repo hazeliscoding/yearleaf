@@ -468,6 +468,37 @@ describe('EventActions repeat ends', () => {
     expect(store.get('aeon-2')).toBeTruthy();
   });
 
+  it('a count past the expansion cap prunes nothing rather than guessing', () => {
+    // Thorn's case, and the one that makes this guard independently
+    // provable: FREQ=DAILY;COUNT=30000 exhausts MAX_STEPS around 2080 while
+    // the true final occurrence is around 2108 — and a 2090 override has a
+    // four-digit key that compares correctly, so without the guard the
+    // truncated boundary really did delete a legitimate row. Unlike the
+    // five-digit case above, deleting the guard turns this red.
+    store.insert({
+      id: 'daily',
+      title: 'Daily practice',
+      color: 'olive',
+      date: new Date(2026, 8, 1),
+      rrule: 'FREQ=DAILY',
+    });
+    store.insert({
+      id: 'daily-2090',
+      title: 'Daily practice — moved',
+      color: 'olive',
+      date: new Date(2090, 5, 1),
+      seriesId: 'daily',
+      occurrenceDate: new Date(2090, 5, 1),
+    });
+
+    actions.setRepeatEnd('daily', { count: 30000 });
+
+    expect(store.get('daily')!.rrule).toBe('FREQ=DAILY;COUNT=30000');
+    // 2090 is inside the true horizon (~2108); a boundary guessed from a
+    // walk the cap cut short must not condemn it.
+    expect(store.get('daily-2090')).toBeTruthy();
+  });
+
   it('shortening drops cancelled dates beyond the end as well', () => {
     const id = actions.create(new Date(2026, 8, 1), 'Seminar');
     actions.setRepeat(id, 'weekly');

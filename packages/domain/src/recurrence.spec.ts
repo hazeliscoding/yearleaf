@@ -249,6 +249,20 @@ describe('how a rule ends', () => {
     ).toEqual([]);
   });
 
+  it('refuses an UNTIL that is not a real calendar date', () => {
+    // new Date(2026, 1, 31) quietly becomes March 3; a validated rule must
+    // not let the calendar move its own end boundary. Shape was checked,
+    // existence was not — which made the "validated" contract false for
+    // any imported or hand-written rule.
+    for (const bad of ['UNTIL=20260231', 'UNTIL=20261301', 'UNTIL=20260900'.replace('0900', '0932')]) {
+      expect(() => parseRecurrenceRule(`FREQ=WEEKLY;BYDAY=TU;${bad}`)).toThrow(
+        UnsupportedRecurrenceError,
+      );
+    }
+    // The boundary cases stay legal.
+    expect(parseRecurrenceRule('FREQ=WEEKLY;BYDAY=TU;UNTIL=20240229').until).toEqual(d(2024, 2, 29));
+  });
+
   it('reads the end a rule carries', () => {
     expect(ruleEnd('FREQ=WEEKLY;BYDAY=TU')).toBeNull();
     expect(ruleEnd('FREQ=WEEKLY;BYDAY=TU;COUNT=16')).toEqual({ count: 16 });

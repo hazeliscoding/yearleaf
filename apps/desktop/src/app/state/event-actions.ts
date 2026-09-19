@@ -265,10 +265,19 @@ export class EventActions {
   private beyondTheEnd(id: string, rrule: string, anchor: Date): Command[] {
     const end = this.endOf(rrule);
     if (!end) return [];
-    const last = expandRecurrence(parseRecurrenceRule(rrule), anchor, {
+    const dates = expandRecurrence(parseRecurrenceRule(rrule), anchor, {
       from: anchor,
       to: 'until' in end ? end.until : new Date(9999, 0, 1),
-    }).at(-1);
+    });
+    // A count the window could not reach means the true final date lies
+    // beyond anything this expansion saw — FREQ=YEARLY;INTERVAL=10000;COUNT=2
+    // ends in the year 12026 — and a boundary guessed from a truncated walk
+    // is a boundary that prunes legitimate rows. Not knowing where the end
+    // is means not pruning. (Today the misprune happens to be masked by
+    // dateKey ordering five-digit years before four-digit ones, but two
+    // defects cancelling is not a state to depend on.)
+    if ('count' in end && dates.length < end.count) return [];
+    const last = dates.at(-1);
     const lastKey = last ? dateKey(last) : dateKey(anchor);
     const steps: Command[] = [];
     for (const row of this.events.events()) {

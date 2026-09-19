@@ -143,7 +143,15 @@ function parseUntil(value: string): Date {
   if (!match) {
     throw new UnsupportedRecurrenceError(`UNTIL must be a YYYYMMDD date, got "${value}"`);
   }
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(year, month - 1, day);
+  // The Date constructor forgives 20260231 by rolling it into March. A rule
+  // that claims to be validated must not let the calendar quietly move its
+  // own end boundary, so a date that does not exist is refused, not shifted.
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new UnsupportedRecurrenceError(`UNTIL must be a real calendar date, got "${value}"`);
+  }
+  return date;
 }
 
 /** Parses one `BYDAY` entry, e.g. `TU` or `-1FR`. */

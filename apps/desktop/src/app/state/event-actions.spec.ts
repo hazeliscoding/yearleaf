@@ -435,6 +435,39 @@ describe('EventActions repeat ends', () => {
     expect(store.get(december)!.title).toBe('Wrap-up');
   });
 
+  it('never prunes against a boundary it could not actually see', () => {
+    // FREQ=YEARLY;INTERVAL=10000;COUNT=2 is absurd and valid: its second
+    // occurrence is in the year 12026, far past any window the sweep
+    // expands, so a boundary guessed from the truncated walk would call the
+    // legitimate second occurrence "beyond the end". Honesty about what this
+    // pins: today the misprune is *also* masked by dateKey ordering
+    // five-digit years before four-digit ones, so this test cannot go red by
+    // deleting the guard alone — it goes red the day either quirk is fixed
+    // without the other, which is exactly the day it is needed.
+    store.insert({
+      id: 'aeon',
+      title: 'Millennium review',
+      color: 'violet',
+      date: new Date(2026, 8, 1),
+      rrule: 'FREQ=YEARLY;INTERVAL=10000',
+    });
+    store.insert({
+      id: 'aeon-2',
+      title: 'Millennium review — rescheduled',
+      color: 'violet',
+      date: new Date(12026, 8, 1),
+      seriesId: 'aeon',
+      occurrenceDate: new Date(12026, 8, 1),
+    });
+
+    actions.setRepeatEnd('aeon', { count: 2 });
+
+    expect(store.get('aeon')!.rrule).toBe('FREQ=YEARLY;INTERVAL=10000;COUNT=2');
+    // The year-12026 row IS the second occurrence — exactly on the end, not
+    // beyond it — and must survive.
+    expect(store.get('aeon-2')).toBeTruthy();
+  });
+
   it('shortening drops cancelled dates beyond the end as well', () => {
     const id = actions.create(new Date(2026, 8, 1), 'Seminar');
     actions.setRepeat(id, 'weekly');

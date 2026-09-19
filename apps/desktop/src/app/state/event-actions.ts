@@ -68,7 +68,31 @@ export class EventActions {
     const event: EventRecord = { id: this.nextId('event'), title, color: 'blue', date };
     this.history.execute(new AddEventCommand(this.events, event));
     this.selection.select('event', event.id);
+    this.selection.occurrence.set(this.occurrenceFor(event));
     return event.id;
+  }
+
+  /**
+   * The occurrence describing a stored event on its own date.
+   *
+   * Selecting an event without one used to be possible only here, and the
+   * inspector edits exclusively through the occurrence — so the panel drew
+   * every control against its fallbacks and wrote through none of them.
+   *
+   * Resolved by asking the store to expand rather than by assembling one, so
+   * this event is described the same way the chips on the calendar are. There
+   * is no ordering problem to work around: `occurrencesByDate` is a pure query
+   * over stored events, not the viewport-scoped cache the renderer memoises,
+   * and the command above has already inserted the row synchronously. A plain
+   * event yields exactly one occurrence, on the day it was created for.
+   */
+  private occurrenceFor(event: EventRecord): Occurrence | null {
+    const day = event.occurrenceDate ?? event.date;
+    return (
+      [...this.events.occurrencesByDate({ from: day, to: day }).values()]
+        .flat()
+        .find((occurrence) => occurrence.event.id === event.id) ?? null
+    );
   }
 
   /**

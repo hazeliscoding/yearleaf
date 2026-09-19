@@ -234,26 +234,20 @@ test('creating an event cannot write through to the one selected before it', asy
   await page.keyboard.press('Enter');
   await expect.poll(async () => (await events(page)).length).toBe(before + 1);
 
-  // An inspector still bound to the *previous* event is the hazard: every
-  // field in it then writes to a row the user is not looking at, and undo
-  // records it as an edit they meant to make.
-  //
-  // The tolerance below is deliberate and temporary. What the panel renders
-  // instead — a complete, enabled event form bound to nothing — is a defect
-  // both 2026-09-18 design gates blocked on, and it is tracked rather than
-  // fixed here because the answer belongs with the creation-path question.
-  // When that lands this should assert the stronger contract: either no Title
-  // field exists, or it reads the title of the event actually created.
+  // The panel must describe the event that was actually created. Binding to
+  // the *previous* event is the hazard this guards — every field then writes
+  // to a row the user is not looking at, with undo recording it as an edit
+  // they meant to make. Binding to nothing is the other failure: the panel
+  // renders every control against its fallbacks and writes through none.
   const title = page.getByLabel('Event title');
-  await expect
-    .poll(async () => ((await title.count()) ? await title.inputValue() : null))
-    .not.toBe('Dentist');
+  await expect.poll(() => title.inputValue()).toBe('Advisor meeting');
 
-  // Whatever it does offer must not reach Dentist either.
-  if (await title.count()) {
-    await title.fill('Rewritten through a stale binding');
-    await title.blur();
-  }
+  // And an edit made here reaches the new event, not the one selected before.
+  await title.fill('Advisor meeting — rescheduled');
+  await title.blur();
+  await expect.poll(async () => (await events(page)).at(-1)!.title).toBe(
+    'Advisor meeting — rescheduled',
+  );
   expect(await dentist()).toBe('Dentist');
 });
 

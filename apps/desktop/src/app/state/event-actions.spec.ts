@@ -7,6 +7,7 @@ import { InMemoryDeskPersistence } from '@infinite-desk/persistence';
 import { DESK_PERSISTENCE } from '../persistence/desk-persistence.token';
 import { EventActions, normaliseTimeLabel } from './event-actions';
 import { EventStore } from './event-store';
+import { SelectionStore } from './selection-store';
 import { HistoryStore } from './history-store';
 
 function seminar(overrides: Partial<EventRecord> = {}): EventRecord {
@@ -139,5 +140,42 @@ describe('EventActions time editing', () => {
     const original = store.get('seminar')!;
     expect(original.timeLabel).toBe('09:00');
     expect(original.variant).toBe('timed');
+  });
+});
+
+describe('EventActions.create', () => {
+  let actions: EventActions;
+  let selection: SelectionStore;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: DESK_PERSISTENCE, useValue: new InMemoryDeskPersistence() }],
+    });
+    actions = TestBed.inject(EventActions);
+    selection = TestBed.inject(SelectionStore);
+  });
+
+  it('leaves the new event selected with the occurrence that describes it', () => {
+    const id = actions.create(new Date(2026, 8, 18), 'Advisor meeting');
+
+    // The inspector edits an event exclusively through the occurrence, so
+    // selecting without one is a panel that renders every control against its
+    // fallbacks and writes through none of them.
+    expect(selection.selection()).toEqual({ kind: 'event', id });
+    expect(selection.occurrence()?.event.id).toBe(id);
+    expect(selection.occurrence()?.event.title).toBe('Advisor meeting');
+  });
+
+  it('describes it on the day it was created for', () => {
+    const date = new Date(2026, 8, 18);
+    actions.create(date, 'Advisor meeting');
+
+    const occurrence = selection.occurrence()!;
+    expect(occurrence.date.getFullYear()).toBe(2026);
+    expect(occurrence.date.getMonth()).toBe(8);
+    expect(occurrence.date.getDate()).toBe(18);
+    // A plain event is its own occurrence: there is no rule to expand and no
+    // row it stands in for, so it is real rather than computed.
+    expect(occurrence.virtual).toBe(false);
   });
 });

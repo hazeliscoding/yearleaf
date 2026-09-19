@@ -311,3 +311,122 @@ describe('EventActions.removeOccurrence on a materialised override', () => {
     expect(later.length, 'and keep computing its other dates').toBe(1);
   });
 });
+
+describe('EventActions repeat ends', () => {
+  let store: EventStore;
+  let actions: EventActions;
+  let history: HistoryStore;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [{ provide: DESK_PERSISTENCE, useValue: new InMemoryDeskPersistence() }],
+    });
+    store = TestBed.inject(EventStore);
+    actions = TestBed.inject(EventActions);
+    history = TestBed.inject(HistoryStore);
+  });
+
+  /** The seminar's own occurrence titles on one day, seed noise excluded. */
+  const on = (id: string, day: Date) =>
+    [...store.occurrencesByDate({ from: day, to: day }).values()]
+      .flat()
+      .filter((o) => o.event.id === id || o.event.seriesId === id);
+
+  it('ends a series after a number of times — the 16-week seminar', () => {
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    actions.setRepeat(id, 'weekly');
+
+    actions.setRepeatEnd(id, { count: 16 });
+
+    expect(store.get(id)!.rrule).toBe('FREQ=WEEKLY;BYDAY=TU;COUNT=16');
+    // Week 16 is Dec 15; week 17 would be Dec 22 and must not exist.
+    expect(on(id, new Date(2026, 11, 15)).length).toBe(1);
+    expect(on(id, new Date(2026, 11, 22))).toEqual([]);
+  });
+
+  it('ends a series on a date, inclusively', () => {
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    actions.setRepeat(id, 'weekly');
+
+    actions.setRepeatEnd(id, { until: new Date(2026, 9, 6) });
+
+    expect(on(id, new Date(2026, 9, 6)).length).toBe(1);
+    expect(on(id, new Date(2026, 9, 13))).toEqual([]);
+  });
+
+  it('keeps the end when the frequency changes', () => {
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    actions.setRepeat(id, 'weekly');
+    actions.setRepeatEnd(id, { count: 16 });
+
+    // "Weekly, 16 times" edited to monthly is still a commitment with a
+    // horizon; changing how often it repeats must not quietly unbound it.
+    actions.setRepeat(id, 'monthly');
+
+    expect(store.get(id)!.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=1;COUNT=16');
+  });
+
+  it('can return a series to forever', () => {
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    actions.setRepeat(id, 'weekly');
+    actions.setRepeatEnd(id, { count: 16 });
+
+    actions.setRepeatEnd(id, null);
+
+    expect(store.get(id)!.rrule).toBe('FREQ=WEEKLY;BYDAY=TU');
+    expect(on(id, new Date(2027, 8, 7)).length).toBe(1);
+  });
+
+  it('refuses an end before the series even starts', () => {
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    actions.setRepeat(id, 'weekly');
+
+    // A series ending before it begins is zero occurrences: an invisible row
+    // the calendar never draws and nothing can click. The inspector refuses
+    // it visibly; this is the belt under those braces.
+    actions.setRepeatEnd(id, { until: new Date(2026, 7, 1) });
+
+    expect(store.get(id)!.rrule).toBe('FREQ=WEEKLY;BYDAY=TU');
+  });
+
+  it('shortening a series takes the overrides beyond the new end with it', () => {
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    actions.setRepeat(id, 'weekly');
+    // Materialise Sep 8 (kept) and Sep 22 (beyond the coming end).
+    const kept = actions.materialise(on(id, new Date(2026, 8, 8))[0]);
+    actions.setTitle(kept, 'Guest speaker');
+    const doomed = actions.materialise(on(id, new Date(2026, 8, 22))[0]);
+    actions.setTitle(doomed, 'Field trip');
+
+    actions.setRepeatEnd(id, { until: new Date(2026, 8, 15) });
+
+    // The user said the series ends on the 15th; a chip on the 22nd claiming
+    // to belong to it would contradict the statement — same rule as deleting
+    // a series, which takes its overrides too.
+    expect(store.get(doomed)).toBeUndefined();
+    expect(on(id, new Date(2026, 8, 22))).toEqual([]);
+    expect(store.get(kept)!.title).toBe('Guest speaker');
+
+    // One step back restores the horizon and the date it had modified.
+    history.undo();
+    expect(store.get(id)!.rrule).toBe('FREQ=WEEKLY;BYDAY=TU');
+    expect(store.get(doomed)!.title).toBe('Field trip');
+  });
+
+  it('shortening drops cancelled dates beyond the end as well', () => {
+    const id = actions.create(new Date(2026, 8, 1), 'Seminar');
+    actions.setRepeat(id, 'weekly');
+    actions.removeOccurrence(on(id, new Date(2026, 8, 22))[0]);
+    const tombstones = () =>
+      store.events().filter((event) => event.seriesId === id && event.deleted);
+    expect(tombstones().length).toBe(1);
+
+    actions.setRepeatEnd(id, { until: new Date(2026, 8, 15) });
+
+    // A suppression marker for a date the rule no longer generates is dead
+    // weight, and it dies with the dates it modified, undoably.
+    expect(tombstones()).toEqual([]);
+    history.undo();
+    expect(tombstones().length).toBe(1);
+  });
+});

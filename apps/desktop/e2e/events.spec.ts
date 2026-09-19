@@ -464,3 +464,87 @@ test('deleting one occurrence leaves the rest of the series standing', async ({ 
   expect(suppressed).not.toContain('Seminar');
   expect(intact).toContain('Seminar');
 });
+
+test('a repeating event can be told when to stop — after so many times', async ({ page }) => {
+  await openWorkspace(page);
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Seminar');
+  await page.keyboard.press('Enter');
+  const created = (await events(page)).at(-1)!;
+
+  await page.getByLabel('Repeats').selectOption('Weekly');
+  await page.getByLabel('Ends').selectOption('After…');
+  const times = page.getByLabel('Repeat times');
+  await times.fill('3');
+  await times.blur();
+
+  // The claim of the whole feature: three Fridays exist and a fourth does not.
+  await expect
+    .poll(async () => (await events(page)).find((e) => e.id === created.id)!.rrule)
+    .toBe('FREQ=WEEKLY;BYDAY=FR;COUNT=3');
+  const on = (iso: string) => page.evaluate((d) => window.__e2e.occurrencesOn(d), iso);
+  expect(await on('2026-10-02T00:00:00')).toContain('Seminar');
+  expect(await on('2026-10-09T00:00:00')).not.toContain('Seminar');
+
+  // An ended preset is still that preset: Weekly with an end must not read
+  // back as Custom, or re-picking any preset would drop the end.
+  await expect(page.getByLabel('Repeats')).toHaveValue('Weekly');
+  await expect(page.getByLabel('Ends')).toHaveValue('After…');
+  await expect(times).toHaveValue('3');
+});
+
+test('a repeating event can end on a date, inclusively', async ({ page }) => {
+  await openWorkspace(page);
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Seminar');
+  await page.keyboard.press('Enter');
+  const created = (await events(page)).at(-1)!;
+
+  await page.getByLabel('Repeats').selectOption('Weekly');
+  await page.getByLabel('Ends').selectOption('On date');
+  const until = page.getByLabel('Repeat until');
+  await until.fill('2026-10-02');
+  await until.blur();
+
+  await expect
+    .poll(async () => (await events(page)).find((e) => e.id === created.id)!.rrule)
+    .toBe('FREQ=WEEKLY;BYDAY=FR;UNTIL=20261002');
+  const on = (iso: string) => page.evaluate((d) => window.__e2e.occurrencesOn(d), iso);
+  expect(await on('2026-10-02T00:00:00')).toContain('Seminar');
+  expect(await on('2026-10-09T00:00:00')).not.toContain('Seminar');
+});
+
+test('an end before the event itself is refused out loud', async ({ page }) => {
+  await openWorkspace(page);
+
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Seminar');
+  await page.keyboard.press('Enter');
+  const created = (await events(page)).at(-1)!;
+
+  await page.getByLabel('Repeats').selectOption('Weekly');
+  await page.getByLabel('Ends').selectOption('On date');
+  const until = page.getByLabel('Repeat until');
+  await until.fill('2026-01-01');
+  await until.blur();
+
+  // A series ending before it begins is zero occurrences — an invisible row
+  // nothing can click. The refusal is visible, the store untouched, and the
+  // refused text does not sit in the box looking accepted.
+  await expect(page.getByText('on or after', { exact: false })).toBeVisible();
+  expect((await events(page)).find((e) => e.id === created.id)!.rrule).toBe(
+    'FREQ=WEEKLY;BYDAY=FR',
+  );
+  await expect(until).toHaveValue('');
+});

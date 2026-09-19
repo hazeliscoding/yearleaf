@@ -12,8 +12,11 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 
 import {
+  dateKey,
   presetForRule,
+  ruleEnd,
   type ImagePayload,
+  type RepeatEnd,
   type RepeatPreset,
   type StationeryColor,
 } from '@infinite-desk/domain';
@@ -167,6 +170,58 @@ const FRAME_VALUES: Readonly<Record<string, ImagePayload['frame']>> = {
                 </select>
               </div>
             </db-inspector-row>
+            @if (endEditable()) {
+              <db-inspector-row label="Ends">
+                <div class="db-select" style="flex:1;min-width:0">
+                  <select
+                    aria-label="Ends"
+                    style="width:100%"
+                    [value]="endChoice()"
+                    (change)="setEndChoice($any($event.target).value)"
+                  >
+                    @for (option of endOptions; track option) {
+                      <option [value]="option" [selected]="option === endChoice()">{{ option }}</option>
+                    }
+                  </select>
+                </div>
+              </db-inspector-row>
+              @if (endMode() === 'date') {
+                <db-inspector-row label="Until">
+                  <input
+                    aria-label="Repeat until"
+                    class="db-input db-numeral"
+                    placeholder="e.g. 2026-12-15"
+                    style="flex:1;min-width:0"
+                    [attr.data-invalid]="endDateRejected() || null"
+                    [value]="endDate()"
+                    (change)="commitEndDate($any($event.target))"
+                  />
+                </db-inspector-row>
+                @if (endDateRejected()) {
+                  <div class="db-help" data-invalid="true" style="padding:0 12px 4px">
+                    Enter a date like 2026-12-15, on or after the event's own date.
+                  </div>
+                }
+              }
+              @if (endMode() === 'count') {
+                <db-inspector-row label="Times">
+                  <input
+                    aria-label="Repeat times"
+                    class="db-input db-numeral"
+                    placeholder="e.g. 16"
+                    style="flex:1;min-width:0"
+                    [attr.data-invalid]="endCountRejected() || null"
+                    [value]="endCount()"
+                    (change)="commitEndCount($any($event.target))"
+                  />
+                </db-inspector-row>
+                @if (endCountRejected()) {
+                  <div class="db-help" data-invalid="true" style="padding:0 12px 4px">
+                    Enter how many times it happens, 1–999.
+                  </div>
+                }
+              }
+            }
           </db-inspector-group>
           }
           @if (editsWholeSeries()) {
@@ -321,6 +376,106 @@ export class Inspector {
     return event.rrule ? 'Custom' : 'Never';
   });
 
+  /**
+   * The stored end of the selected series, read straight off the store.
+   *
+   * `null` is a series that runs forever; `undefined` is a rule the engine
+   * cannot parse, which the Ends control must not offer to rewrite.
+   */
+  private readonly storedEnd = computed<RepeatEnd | null | undefined>(() => {
+    const rrule = this.selectedEvent()?.rrule;
+    if (!rrule) return null;
+    try {
+      return ruleEnd(rrule);
+    } catch {
+      return undefined;
+    }
+  });
+
+  /** The Ends control renders only when there is a rule it can safely rewrite. */
+  protected readonly endEditable = computed(
+    () => !!this.selectedEvent()?.rrule && this.storedEnd() !== undefined,
+  );
+
+  /**
+   * A mode chosen in the Ends select whose value has not arrived yet.
+   *
+   * Choosing "On date" opens the date field but writes nothing — "ends on a
+   * date" without the date is not a statement. The pending choice is local
+   * state in the same sense as the time stash, and resets with it.
+   */
+  private readonly pendingEndMode = signal<'date' | 'count' | null>(null);
+
+  protected readonly endMode = computed<'never' | 'date' | 'count'>(() => {
+    const pending = this.pendingEndMode();
+    if (pending) return pending;
+    const stored = this.storedEnd();
+    if (stored && 'until' in stored) return 'date';
+    if (stored && 'count' in stored) return 'count';
+    return 'never';
+  });
+
+  protected readonly endOptions = ['Never', 'On date', 'After…'] as const;
+  protected readonly endChoice = computed(() =>
+    this.endMode() === 'date' ? 'On date' : this.endMode() === 'count' ? 'After…' : 'Never',
+  );
+
+  protected readonly endDate = computed(() => {
+    const stored = this.storedEnd();
+    return stored && 'until' in stored ? dateKey(stored.until) : '';
+  });
+  protected readonly endCount = computed(() => {
+    const stored = this.storedEnd();
+    return stored && 'count' in stored ? String(stored.count) : '';
+  });
+
+  /** `true` while the last entry into the matching field was refused. */
+  protected readonly endDateRejected = signal(false);
+  protected readonly endCountRejected = signal(false);
+
+  protected setEndChoice(choice: string): void {
+    const event = this.selectedEvent();
+    if (!event) return;
+    this.endDateRejected.set(false);
+    this.endCountRejected.set(false);
+    if (choice === 'Never') {
+      this.pendingEndMode.set(null);
+      this.eventActions.setRepeatEnd(event.id, null);
+      return;
+    }
+    this.pendingEndMode.set(choice === 'On date' ? 'date' : 'count');
+  }
+
+  /** Commits a typed end date; refusals redraw from the store, like the time field. */
+  protected commitEndDate(field: HTMLInputElement): void {
+    const event = this.selectedEvent();
+    if (!event) return;
+    const parsed = parseEndDate(field.value);
+    // Before the event's own date, the series would end before it begins:
+    // zero occurrences, an invisible row nothing can select or delete.
+    const valid = parsed !== null && dateKey(parsed) >= dateKey(event.date);
+    this.endDateRejected.set(!valid);
+    if (valid) {
+      this.eventActions.setRepeatEnd(event.id, { until: parsed });
+      this.pendingEndMode.set(null);
+    }
+    field.value = this.endDate();
+  }
+
+  /** Commits a typed occurrence count, 1–999; refusals redraw from the store. */
+  protected commitEndCount(field: HTMLInputElement): void {
+    const event = this.selectedEvent();
+    if (!event) return;
+    const count = /^\s*\d{1,3}\s*$/.test(field.value) ? Number(field.value) : NaN;
+    const valid = Number.isInteger(count) && count >= 1;
+    this.endCountRejected.set(!valid);
+    if (valid) {
+      this.eventActions.setRepeatEnd(event.id, { count });
+      this.pendingEndMode.set(null);
+    }
+    field.value = this.endCount();
+  }
+
   /** `true` when the selection belongs to a series, so edits reach them all. */
   protected readonly editsWholeSeries = computed(() => !!this.selectedEvent()?.rrule);
 
@@ -462,6 +617,14 @@ export class Inspector {
     this.selectedEventId();
     this.stashedTime.set('');
     this.timeRevealed.set(false);
+    this.pendingEndMode.set(null);
+    this.endDateRejected.set(false);
+    this.endCountRejected.set(false);
+    // The refusal marker belongs to the entry that was refused, not to the
+    // next event along: without this line, one bad time left the following
+    // selection's perfectly good time flagged invalid (Polish backlog,
+    // found by the 2026-09-18 UX gate).
+    this.timeRejected.set(false);
   });
 
   /** Clearing the time is what makes an event all-day; this says so out loud. */
@@ -558,4 +721,22 @@ export class Inspector {
     const id = this.selection.selection()?.id;
     if (id) this.actions.setRotation(id, degrees);
   }
+}
+
+/**
+ * Reads a typed end date as a floating calendar date, or refuses it.
+ *
+ * One spelling, the one the placeholder shows: `YYYY-MM-DD`. The Date
+ * constructor forgives 2026-02-31 by rolling it into March; the round-trip
+ * check refuses the roll, so the box never accepts a date it would then
+ * silently change.
+ */
+function parseEndDate(text: string): Date | null {
+  const match = /^\s*(\d{4})-(\d{2})-(\d{2})\s*$/.exec(text);
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(year, month - 1, day);
+  const kept =
+    date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+  return kept ? date : null;
 }

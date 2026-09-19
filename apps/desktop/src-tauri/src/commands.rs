@@ -653,6 +653,33 @@ mod tests {
   }
 
   #[test]
+  fn a_rule_that_ends_survives_storage_ending_intact() {
+    // The stop date rides the existing rrule column as part of the string,
+    // and this layer treats the string as opaque — which is exactly the
+    // claim: nothing between the webview and the file trims, parses or
+    // reformats it, on either the UNTIL or the COUNT spelling.
+    let mut conn = open_test_db();
+    let mut until = event("until", "2026-09-01");
+    until.rrule = Some("FREQ=WEEKLY;BYDAY=TU;UNTIL=20261215".to_owned());
+    save_event_impl(&mut conn, "desk-1", &until).expect("save until series");
+    let mut count = event("count", "2026-09-01");
+    count.rrule = Some("FREQ=WEEKLY;BYDAY=TU;COUNT=16".to_owned());
+    save_event_impl(&mut conn, "desk-1", &count).expect("save count series");
+
+    let loaded = load_events_impl(&conn, "desk-1").expect("load");
+    let rule_of = |id: &str| {
+      loaded
+        .iter()
+        .find(|e| e.id == id)
+        .and_then(|e| e.rrule.as_deref())
+        .expect("stored rule")
+        .to_owned()
+    };
+    assert_eq!(rule_of("until"), "FREQ=WEEKLY;BYDAY=TU;UNTIL=20261215");
+    assert_eq!(rule_of("count"), "FREQ=WEEKLY;BYDAY=TU;COUNT=16");
+  }
+
+  #[test]
   fn clearing_the_rule_turns_a_series_back_into_one_event() {
     let mut conn = open_test_db();
     let mut series = event("series", "2026-09-01");

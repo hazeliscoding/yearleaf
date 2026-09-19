@@ -6,7 +6,9 @@ import {
   formatRecurrenceRule,
   parseRecurrenceRule,
   presetForRule,
+  ruleEnd,
   ruleForPreset,
+  withRuleEnd,
 } from './recurrence';
 
 /** Local-midnight date, so tests read as calendar dates. */
@@ -233,5 +235,49 @@ describe('expandRecurrence', () => {
       '2026-09-21',
       '2026-10-04',
     ]);
+  });
+});
+
+describe('how a rule ends', () => {
+  it('yields nothing when UNTIL falls before the series start', () => {
+    // UNTIL is a floating calendar date compared day by day, like every other
+    // date in this engine — no timezone arithmetic can move it, and a series
+    // told to end before it begins simply never happens.
+    const rule = parseRecurrenceRule('FREQ=WEEKLY;BYDAY=TU;UNTIL=20260801');
+    expect(
+      expandRecurrence(rule, d(2026, 9, 1), { from: d(2026, 1, 1), to: d(2027, 1, 1) }),
+    ).toEqual([]);
+  });
+
+  it('reads the end a rule carries', () => {
+    expect(ruleEnd('FREQ=WEEKLY;BYDAY=TU')).toBeNull();
+    expect(ruleEnd('FREQ=WEEKLY;BYDAY=TU;COUNT=16')).toEqual({ count: 16 });
+    expect(ruleEnd('FREQ=WEEKLY;BYDAY=TU;UNTIL=20261215')).toEqual({ until: d(2026, 12, 15) });
+  });
+
+  it('re-ends a rule without touching the rest of it', () => {
+    expect(withRuleEnd('FREQ=WEEKLY;BYDAY=TU', { count: 16 })).toBe(
+      'FREQ=WEEKLY;BYDAY=TU;COUNT=16',
+    );
+    expect(withRuleEnd('FREQ=WEEKLY;BYDAY=TU;COUNT=16', { until: d(2026, 12, 15) })).toBe(
+      'FREQ=WEEKLY;BYDAY=TU;UNTIL=20261215',
+    );
+    expect(withRuleEnd('FREQ=WEEKLY;BYDAY=TU;UNTIL=20261215', null)).toBe('FREQ=WEEKLY;BYDAY=TU');
+    // A rich rule keeps everything but its ending.
+    expect(withRuleEnd('FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;COUNT=8', { count: 4 })).toBe(
+      'FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;COUNT=4',
+    );
+  });
+
+  it('recognises a preset that merely ends', () => {
+    const tue = d(2026, 9, 15);
+    // The Repeats control must not read "Custom" the moment a stop exists, or
+    // choosing any preset again would silently drop the end.
+    expect(presetForRule('FREQ=WEEKLY;BYDAY=TU;COUNT=16', tue)).toBe('weekly');
+    expect(presetForRule('FREQ=MONTHLY;BYMONTHDAY=15;UNTIL=20270601', tue)).toBe('monthly');
+    // Richer than a preset stays richer, ended or not.
+    expect(presetForRule('FREQ=MONTHLY;BYDAY=-1FR;COUNT=3', tue)).toBeNull();
+    // And garbage stays null rather than becoming a throw.
+    expect(presetForRule('FREQ=SECONDLY', tue)).toBeNull();
   });
 });

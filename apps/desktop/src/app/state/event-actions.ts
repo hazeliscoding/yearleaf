@@ -8,11 +8,19 @@ import { Injectable, inject } from '@angular/core';
 
 import {
   AddEventCommand,
+  CompositeCommand,
   DeleteEventCommand,
   UpdateEventCommand,
+  dateKey,
+  expandRecurrence,
+  parseRecurrenceRule,
+  ruleEnd,
   ruleForPreset,
+  withRuleEnd,
+  type Command,
   type EventRecord,
   type Occurrence,
+  type RepeatEnd,
   type RepeatPreset,
   type StationeryColor,
 } from '@infinite-desk/domain';
@@ -215,7 +223,11 @@ export class EventActions {
     // A rule belongs to the series. Storing one on an override would never be
     // expanded, but would still light the repeat glyph and read back as set.
     if (!event || event.seriesId) return;
-    const rrule = preset ? ruleForPreset(preset, event.date) : undefined;
+    // Changing how often it repeats does not change when it stops: "weekly,
+    // 16 times" edited to monthly is still a commitment with a horizon, and
+    // dropping the end here would quietly unbound it.
+    const end = event.rrule ? this.endOf(event.rrule) : null;
+    const rrule = preset ? withRuleEnd(ruleForPreset(preset, event.date), end) : undefined;
     this.history.execute(
       new UpdateEventCommand(
         this.events,
@@ -224,6 +236,65 @@ export class EventActions {
         rrule ? 'Repeat event' : 'Stop repeating',
       ),
     );
+  }
+
+  /** The end a rule carries, with garbage read as forever rather than thrown. */
+  private endOf(rrule: string): RepeatEnd | null {
+    try {
+      return ruleEnd(rrule);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Changes when a series stops: on a date, after a count, or never.
+   *
+   * Shortening takes the series rows beyond the new final date with it —
+   * overrides and cancelled dates alike, in the same undoable step. The user
+   * has said the series ends on X; a chip past X still claiming to belong to
+   * it would contradict the statement. This is the rule series deletion
+   * already follows, met at a boundary instead of everywhere.
+   *
+   * An `until` before the series' own anchor is refused: it describes a
+   * series with zero occurrences, which the calendar never draws — an
+   * invisible row nothing can select or delete. The inspector refuses it
+   * visibly; this guard is the belt under those braces.
+   */
+  setRepeatEnd(id: string, end: RepeatEnd | null): void {
+    const event = this.events.get(id);
+    if (!event || event.seriesId || !event.rrule) return;
+    if (end && 'until' in end && dateKey(end.until) < dateKey(event.date)) return;
+    if (end && 'count' in end && (!Number.isInteger(end.count) || end.count < 1)) return;
+
+    let rrule: string;
+    try {
+      rrule = withRuleEnd(event.rrule, end);
+    } catch {
+      return;
+    }
+    if (rrule === event.rrule) return;
+
+    const label = end ? 'End repeat' : 'Repeat forever';
+    const steps: Command[] = [new UpdateEventCommand(this.events, id, { rrule }, label)];
+
+    if (end) {
+      // The new final date. For a count the window's far edge never binds —
+      // expansion returns the moment the count is reached.
+      const last = expandRecurrence(parseRecurrenceRule(rrule), event.date, {
+        from: event.date,
+        to: 'until' in end ? end.until : new Date(9999, 0, 1),
+      }).at(-1);
+      const lastKey = last ? dateKey(last) : dateKey(event.date);
+      for (const row of this.events.events()) {
+        if (row.seriesId !== id || !row.occurrenceDate) continue;
+        if (dateKey(row.occurrenceDate) > lastKey) {
+          steps.push(new DeleteEventCommand(this.events, row.id));
+        }
+      }
+    }
+
+    this.history.execute(steps.length === 1 ? steps[0] : new CompositeCommand(steps, label));
   }
 
   /** Deletes a stored event; a series takes its overrides with it. */

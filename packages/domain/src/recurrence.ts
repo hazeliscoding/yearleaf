@@ -282,11 +282,62 @@ export function ruleForPreset(preset: RepeatPreset, date: Date): string {
   }
 }
 
-/** The preset a stored rule corresponds to, or `null` for anything richer. */
+/**
+ * How a repeating rule ends: on a date (inclusive), or after a total number
+ * of occurrences counted from the series start. A rule with neither runs
+ * forever, represented as `null` wherever this type is optional.
+ */
+export type RepeatEnd = { readonly until: Date } | { readonly count: number };
+
+/**
+ * The end a stored rule carries, or `null` for a rule that runs forever.
+ *
+ * Throws {@link UnsupportedRecurrenceError} on a rule the engine cannot
+ * parse, exactly as {@link parseRecurrenceRule} does — a caller that wants a
+ * quiet answer for garbage should catch, the way {@link presetForRule} does.
+ */
+export function ruleEnd(rrule: string): RepeatEnd | null {
+  const rule = parseRecurrenceRule(rrule);
+  if (rule.count !== undefined) return { count: rule.count };
+  if (rule.until) return { until: rule.until };
+  return null;
+}
+
+/**
+ * The same rule ending differently — on a date, after a count, or never.
+ *
+ * Everything else about the rule survives: frequency, interval, weekday and
+ * month-day parts. `COUNT` and `UNTIL` are mutually exclusive in RFC 5545 and
+ * in {@link parseRecurrenceRule}'s validation, so setting one always clears
+ * the other.
+ */
+export function withRuleEnd(rrule: string, end: RepeatEnd | null): string {
+  const rule = parseRecurrenceRule(rrule);
+  return formatRecurrenceRule({
+    ...rule,
+    count: end && 'count' in end ? end.count : undefined,
+    until: end && 'until' in end ? end.until : undefined,
+  });
+}
+
+/**
+ * The preset a stored rule corresponds to, or `null` for anything richer.
+ *
+ * An ended preset is still that preset: the ending is stripped before the
+ * comparison, because a Repeats control that read "Custom" the moment a stop
+ * date existed would silently drop the end when any preset was picked again.
+ * Never throws — an unparseable rule is simply not a preset.
+ */
 export function presetForRule(rrule: string | undefined, date: Date): RepeatPreset | null {
   if (!rrule) return null;
+  let body: string;
+  try {
+    body = withRuleEnd(rrule, null);
+  } catch {
+    return null;
+  }
   for (const preset of ['daily', 'weekly', 'monthly', 'yearly'] as const) {
-    if (ruleForPreset(preset, date) === rrule) return preset;
+    if (ruleForPreset(preset, date) === body) return preset;
   }
   return null;
 }

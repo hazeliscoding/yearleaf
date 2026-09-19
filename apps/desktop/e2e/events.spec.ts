@@ -234,10 +234,16 @@ test('creating an event cannot write through to the one selected before it', asy
   await page.keyboard.press('Enter');
   await expect.poll(async () => (await events(page)).length).toBe(before + 1);
 
-  // An inspector bound to nothing is the acceptable state here and is what
-  // the creation path gives today. An inspector still bound to the *previous*
-  // event is not: every field in it then writes to a row the user is not
-  // looking at, and undo records it as an edit they meant to make.
+  // An inspector still bound to the *previous* event is the hazard: every
+  // field in it then writes to a row the user is not looking at, and undo
+  // records it as an edit they meant to make.
+  //
+  // The tolerance below is deliberate and temporary. What the panel renders
+  // instead — a complete, enabled event form bound to nothing — is a defect
+  // both 2026-09-18 design gates blocked on, and it is tracked rather than
+  // fixed here because the answer belongs with the creation-path question.
+  // When that lands this should assert the stronger contract: either no Title
+  // field exists, or it reads the title of the event actually created.
   const title = page.getByLabel('Event title');
   await expect
     .poll(async () => ((await title.count()) ? await title.inputValue() : null))

@@ -47,10 +47,26 @@ export class SelectionStore {
     }
   });
 
-  /** Selects a desk object or event. */
+  /**
+   * Selects a desk object or event.
+   *
+   * The occurrence is always dropped, including when one event replaces
+   * another. Keeping it for event kinds assumed every path that selects an
+   * event also sets it, and the creation path does not: `EventActions.create`
+   * selects the new row and leaves the occurrence naming the row before it.
+   * The inspector edits exclusively through the occurrence, so a selection
+   * naming one event while the occurrence named another was not an inspector
+   * showing stale text — it was every field in it writing to a row the user
+   * was not looking at, with undo recording the damage as a deliberate edit.
+   *
+   * Clearing unconditionally makes the worst case an inspector bound to
+   * nothing, which is what a freshly created event already showed. Whether
+   * creation should select at all, and whether it should supply an
+   * occurrence, are open — this holds under either answer.
+   */
   select(kind: SelectionKind, id: string): void {
     this.selection.set({ kind, id });
-    if (kind !== 'event') this.occurrence.set(null);
+    this.occurrence.set(null);
   }
 
   /** Clears the selection. */

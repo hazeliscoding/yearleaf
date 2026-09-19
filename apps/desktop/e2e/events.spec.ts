@@ -212,6 +212,45 @@ test('an Enter carrying only the legacy IME keyCode is not a commit either', asy
   expect((await events(page)).length).toBe(before);
 });
 
+test('creating an event cannot write through to the one selected before it', async ({ page }) => {
+  await openWorkspace(page);
+  const dentist = () =>
+    page.evaluate(() => window.__e2e.events().find((e) => e.id === 'seed-09-15-0')!.title);
+  expect(await dentist()).toBe('Dentist');
+
+  // Select an existing chip the working way, which populates the occurrence
+  // the inspector actually edits through.
+  await page.evaluate(() => window.__e2e.selectEvent('seed-09-15-0'));
+  await expect(page.getByLabel('Event title')).toHaveValue('Dentist');
+
+  // Now create a different event. The selection moves to it; the occurrence
+  // used to stay behind, because only non-event kinds cleared it.
+  const before = (await events(page)).length;
+  await page.keyboard.press('e');
+  const target = await canvasCentre(page);
+  await page.mouse.click(target.x, target.y);
+  await expect(page.getByLabel('Edit text')).toBeFocused();
+  await page.keyboard.type('Advisor meeting');
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await events(page)).length).toBe(before + 1);
+
+  // An inspector bound to nothing is the acceptable state here and is what
+  // the creation path gives today. An inspector still bound to the *previous*
+  // event is not: every field in it then writes to a row the user is not
+  // looking at, and undo records it as an edit they meant to make.
+  const title = page.getByLabel('Event title');
+  await expect
+    .poll(async () => ((await title.count()) ? await title.inputValue() : null))
+    .not.toBe('Dentist');
+
+  // Whatever it does offer must not reach Dentist either.
+  if (await title.count()) {
+    await title.fill('Rewritten through a stale binding');
+    await title.blur();
+  }
+  expect(await dentist()).toBe('Dentist');
+});
+
 test('a weekly series is stored once and drawn on every matching date', async ({ page }) => {
   await openWorkspace(page);
   const before = (await events(page)).length;

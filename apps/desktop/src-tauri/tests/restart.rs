@@ -10,13 +10,26 @@
 //! real IPC boundary and is then killed outright, and a fresh one reads it
 //! back. Nothing is shared between them but the files on disk.
 //!
-//! What this does **not** prove: that the Angular application asks for the
-//! right thing. It drives the same commands the webview invokes, with the same
-//! wire shapes, but the TypeScript adapter that calls them is not in the loop.
-//! And it proves survival of a dead *process*, not of a power cut: `db::open`
-//! sets `synchronous=NORMAL`, which deliberately leaves the write-ahead log to
-//! the operating system's cache between checkpoints. Killing a process does not
-//! empty that cache; pulling the plug would.
+//! What this does **not** prove, in the order the gaps matter:
+//!
+//! - That the Angular application asks for the right thing. It drives the same
+//!   commands the webview invokes, with the same wire shapes, but the
+//!   TypeScript adapter that calls them is not in the loop.
+//! - That a write *in flight* survives. The process is killed after a
+//!   successful save response, so an interrupted transaction, or an edit the
+//!   application had not yet sent, is outside what is tested here.
+//! - Survival of a power cut. `db::open` sets `synchronous=NORMAL`, which
+//!   deliberately leaves the write-ahead log to the operating system's cache
+//!   between checkpoints. Killing a process does not empty that cache; pulling
+//!   the plug would.
+//! - Anything but one sticky object: not events, not attachment files, and not
+//!   the application's own startup sequence, which this bypasses.
+//!
+//! One thing worth not claiming either. `abort` skips destructors, but it does
+//! not prove no checkpoint happened before it — SQLite may checkpoint during a
+//! commit. A non-empty log is therefore suggestive and nothing more, which is
+//! why the orphan comparison below exists: it measures where the commit was,
+//! instead of arguing about where it should have been.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -143,11 +156,34 @@ fn restart_child() {
 
 fn desk_dir(tag: &str) -> PathBuf {
   let dir = std::env::temp_dir().join(format!("yearleaf-restart-{}-{tag}", std::process::id()));
-  let _ = std::fs::remove_dir_all(&dir);
+  if dir.exists() {
+    // Not ignored: a fixture that quietly starts on top of someone else's
+    // leftovers is not the fresh desk the test below claims to be using.
+    std::fs::remove_dir_all(&dir).expect("clear a stale desk dir before reusing its name");
+  }
   std::fs::create_dir_all(&dir).expect("desk dir");
   dir
 }
 
+/// Removes desk directories once the test that made them has passed.
+///
+/// Deliberately not a `Drop` guard: unwinding would run it on the way out of a
+/// failure, deleting the crashed desk and its log — exactly the evidence
+/// anybody investigating would want. A leaked directory after a red test is
+/// cheaper than a red test with nothing left to look at.
+fn tidy(dirs: &[&Path]) {
+  for dir in dirs {
+    std::fs::remove_dir_all(dir).expect("remove desk dir");
+  }
+}
+
+/// Runs a copy of this binary in the given role and waits for it to finish.
+///
+/// No timeout: `output()` waits for as long as the child takes, so a child that
+/// hangs hangs the suite rather than failing it. Adding one means spawning the
+/// wait on a thread and killing by process id when it expires, which is
+/// platform-specific in the part that matters — recorded in the roadmap rather
+/// than written speculatively for a hang that has not happened.
 fn spawn(role: &str, dir: &Path) -> std::process::Output {
   Command::new(std::env::current_exe().expect("test binary"))
     .args(["restart_child", "--exact", "--nocapture", "--test-threads=1"])
@@ -207,6 +243,8 @@ fn an_object_survives_a_process_that_never_shut_down() {
   // Not a count: the same object. Geometry, rotation and the whole nested
   // payload, compared against what went in.
   assert_eq!(objects[0], subject(), "the object came back changed");
+
+  tidy(&[&dir]);
 }
 
 /// Shows the object really is being recovered from the log.
@@ -220,14 +258,18 @@ fn the_object_is_in_the_log_rather_than_the_database_file() {
   let dir = desk_dir("wal-only");
   assert!(!spawn("write", &dir).status.success(), "writer must crash");
 
+  // Taken before anything reads the desk. A reader closes the last connection
+  // cleanly, and SQLite checkpoints on that close — so copying afterwards
+  // could capture a file that had just had the recovered commit folded into
+  // it, and the absence below would fail for a database that was working
+  // perfectly. The copy has to be of the crash, not of the recovery.
+  let orphan = desk_dir("wal-orphan");
+  std::fs::copy(dir.join("desk.db"), orphan.join("desk.db")).expect("copy database file");
+
   // With its log, the object is there — stated here rather than borrowed from
   // the test above, so this one cannot pass by nothing ever having been
   // written. Absence is only evidence once presence is established.
   assert_eq!(read_desk(&dir)["objects"][0], subject(), "written and readable");
-
-  // The database file alone, orphaned from the log that holds the commit.
-  let orphan = desk_dir("wal-orphan");
-  std::fs::copy(dir.join("desk.db"), orphan.join("desk.db")).expect("copy database file");
 
   assert_eq!(
     read_desk(&orphan),
@@ -235,6 +277,8 @@ fn the_object_is_in_the_log_rather_than_the_database_file() {
     "the database file already held the desk, so the log was not carrying the \
      commit and the replay path is not what the other tests exercised"
   );
+
+  tidy(&[&dir, &orphan]);
 }
 
 #[test]
@@ -251,4 +295,6 @@ fn a_second_process_reads_it_without_the_first_ever_cleaning_up() {
       "reader {attempt} saw it changed"
     );
   }
+
+  tidy(&[&dir]);
 }
